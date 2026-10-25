@@ -1362,3 +1362,36 @@ test('explain: credit going elsewhere, a stall, and a player that isn\'t playing
   assert.equal(f.text, '3 watch events with no credit: another Kick stream on your account is taking it');
   assert.equal(farmer.explain().verdict.text, f.text);
 });
+
+test('explain: before the first check, a reward being claimed, a row off, an uncredited event and a second stall', async () => {
+  const fresh = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] } });
+  fresh.farmer.running = false;
+  assert.equal(failed(fresh.farmer.explain()).text, 'Farming hasn’t started yet');
+  assert.deepEqual(fresh.farmer.explain().drops, [], 'nothing loaded yet');
+
+  // Unlocked, and auto-claim will take it: no more watch time needed.
+  const ready = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] }, units: { a: 60 } });
+  ready.farmer.rawCampaigns = ready.api.list;
+  ready.farmer.progress = await ready.api.progress();
+  ready.farmer.buildModel();
+  assert.equal(failed(ready.farmer.explain()).text, 'Hype Emote is being claimed');
+
+  // A row switched off: its streams aren't looked for.
+  const off = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] } }, { disabledCategories: [1] });
+  await off.farmer.tick();
+  assert.equal(off.farmer.explain().checks.find((k) => k.step === 'stream').text, 'Not looked for while its row is switched off');
+  // Its streams not listed yet.
+  off.farmer.store.set({ disabledCategories: [] });
+  off.farmer.buildModel();
+  assert.equal(off.farmer.explain().checks.find((k) => k.step === 'stream').text, 'Neon Rush’s live streams haven’t been checked yet');
+
+  const { farmer, watcher } = await farmingNow();
+  watcher.emit('watch-event', { t: Date.now() });
+  Object.assign(watcher.status, { video: { paused: false, readyState: 4 }, lastEventAt: Date.now() });
+  assert.equal(farmer.explain().checks.at(-1).note, '1 since the last credit (it warns at 3)');
+  delete watcher.status.lastEventAt;
+  assert.match(farmer.explain().checks.at(-1).text, /^Playing: the first watch event comes about 2 min in$/);
+  farmer.current.lastProgressAt = Date.now() - 25 * MIN;
+  farmer.current.stallReloaded = true;
+  assert.equal(failed(farmer.explain()).note, 'Reloaded once: it moves to another stream next');
+});
