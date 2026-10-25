@@ -346,3 +346,16 @@ function rowArt(cat, cls = 'cat-art') {
   if (chs.length === 1) return `<span class="row-art one ${cls}-row" data-tip="${esc(chs[0].username)} · ${esc(cat.category?.name ?? '')}">${av(chs[0])}${img(cat.category?.image, 'cat-badge')}</span>`;
   return `<span class="row-art many ${cls}-row" data-tip="${esc(chs.map((c) => c.username).join(', '))} · ${esc(cat.category?.name ?? '')}">${chs.slice(0, 2).map(av).join('')}${chs.length > 2 ? `<span class="more">+${chs.length - 2}</span>` : ''}</span>`;
 }
+
+/**
+ * A list a page at a time, as many rows as fit (Activity, Settings › Developer), about to get a
+ * smaller page to make room for an open row: if that page would leave the row out, it moves on so
+ * the row is its last. `list` is the view's { before, pages, data, open }. True when it moved.
+ */
+function pageToOpenRow(list, rows) {
+  const at = list.open == null ? -1 : (list.data?.entries.findIndex((e) => e.n === list.open) ?? -1);
+  if (at < rows) return false;
+  list.pages.push(list.before);
+  list.before = list.data.entries[at - rows].n;
+  return true;
+}

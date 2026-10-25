@@ -61,6 +61,7 @@ function fitDeveloper() {
   const room = el.clientHeight - ($('.dev-list .act-detail')?.offsetHeight ?? 0);
   const rows = Math.max(2, Math.floor(room / DEV_ROW_H));
   if (rows !== dev.limit || !dev.data) {
+    pageToOpenRow(dev, rows);
     dev.limit = rows;
     loadDeveloper();
   }
@@ -151,7 +152,7 @@ function developerPane(row) {
   const last = d ? d.newer + d.entries.length : 0;
   const pager = d?.total
     ? `<div class="act-pager">
-        ${dev.before !== null ? `<button class="btn sm ghost act-newest" data-action="dev-newest">${icon('up')} Newest</button>` : ''}
+        ${dev.before !== null ? `<button class="btn sm icon-only ghost act-newest" data-action="dev-newest" data-tip="Newest">${icon('up')}</button>` : ''}
         <span class="act-range">${first}–${last} of ${d.total}</span>
         <button class="btn sm icon-only" data-action="dev-newer" data-tip="Newer" ${dev.before === null ? 'disabled' : ''}>${icon('chevronLeft')}</button>
         <button class="btn sm icon-only" data-action="dev-older" data-tip="Older" ${last >= d.total ? 'disabled' : ''}>${icon('chevronRight')}</button>

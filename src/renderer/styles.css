@@ -6544,6 +6544,7 @@ button.act-row:hover,
   display: flex;
   align-items: center;
   gap: 10px;
+  white-space: nowrap;
 }
 .tab-chip {
   display: inline-flex;

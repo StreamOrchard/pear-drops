@@ -85,7 +85,7 @@ test('the pane: the switch, the first-time warning, the report and the list’s 
   assert.match(pane, /Saved pear-drops-diagnostics\.txt to Downloads/);
   assert.match(pane, /data-action="dev-problems"[^>]*>.*Errors only<span class="act-count">2<\/span>/s);
   assert.match(pane, /No errors<\/b><span>Every answer from Kick was OK\./);
-  assert.match(pane, /Newest/);
+  assert.match(pane, /data-action="dev-newest" data-tip="Newest"/);
   run('dev.warn = false; dev.saved = { error: true }; dev.list = "watch"; dev.before = null; dev.data = null');
   pane = run('developerPane(row)', { row });
   assert.match(pane, /class="switch " data-action="dev-switch"/);
@@ -126,6 +126,27 @@ test('the switch: off at once; on asks first, the first time only; the ⋯ only 
   assert.match(menu, /data-id="kick"/);
   ctx.state = { settings: { developerTools: true }, developer: { kickPage: false } };
   assert.doesNotMatch(run('devMenu()'), /data-id="kick"/, 'demo mode has no hidden Kick page');
+});
+
+test('opening a row low on the page moves the page so it stays the last row, rather than a smaller page leaving it out', async () => {
+  const asked = [];
+  ctx.window.pd.developer.page = async (list, opts) => (asked.push(JSON.parse(JSON.stringify(opts))), { entries: [], total: 0, newer: 0, counts: {} });
+  // 300 px of list with a 100 px row open: room for 4 rows of 50.
+  const els = { '.dev-list': { clientHeight: 300 }, '.dev-list .act-detail': { offsetHeight: 100 } };
+  ctx.document.querySelector = (sel) => els[sel] ?? null;
+  const fit = async (open) => {
+    run('Object.assign(dev, { list: "requests", filter: "all", before: null, pages: [], limit: 6, open, loading: false, queued: false, data: { entries: [14, 13, 12, 11, 10, 9].map((n) => ({ n })) } })', { open });
+    run('fitDeveloper()');
+    const at = JSON.parse(run('JSON.stringify({ before: dev.before, pages: dev.pages, limit: dev.limit })'));
+    await new Promise((r) => setImmediate(r));
+    return at;
+  };
+  assert.deepEqual(await fit(10), { before: 14, pages: [null], limit: 4 }, 'the 5th row: the page starts one later, so it’s the 4th');
+  assert.deepEqual(asked.at(-1), { filter: 'all', before: 14, limit: 4 });
+  assert.deepEqual(await fit(9), { before: 13, pages: [null], limit: 4 }, 'the 6th');
+  assert.deepEqual(await fit(11), { before: null, pages: [], limit: 4 }, 'the 4th still fits: the page stays');
+  assert.deepEqual(await fit(null), { before: null, pages: [], limit: 4 }, 'nothing open');
+  ctx.document.querySelector = () => null;
 });
 
 test('developer.js declares nothing another page script already has (one would quietly replace the other)', () => {
