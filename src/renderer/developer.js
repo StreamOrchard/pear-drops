@@ -1,8 +1,9 @@
-/* global render, icon, esc, $, ui, state, setHTML */
+/* global render, icon, esc, $, ui, state, setHTML, openModal */
 // Settings › Developer: the Developer tools switch, Copy diagnostics, and what src/main/devlog.js
 // keeps (Errors, Requests to Kick, the player's Watch events), newest first, a page at a time, as many
 // as fit, as the Activity view shows them. A click opens a row with Copy. With the switch on, the
-// stream's header gets a ⋯ menu: Copy player state, and Inspect for the stream and Kick's page.
+// stream's header gets a ⋯ menu: Copy player state, Why isn't this farming?, and Inspect for the
+// stream and Kick's page. Why isn't this farming? also opens from the status in the title bar.
 
 const DEV_ROW_H = 50; // px: a row, its border included (styles.css .act-row)
 const DEV_LISTS = [
@@ -24,6 +25,8 @@ const dev = {
   warn: false, // turning it on the first time: what Inspect can see, before it's on
   saved: null, // { name } of the diagnostics just saved to Downloads, or { error: true }
   menu: false, // the stream header's ⋯ menu
+  why: null, // Why isn't this farming?: the farmer's checks (farmer.explain()), while it's open
+  whyId: null, // the drop it's about (null: the one being watched, else the first in the queue)
   loading: false,
   queued: false,
 };
@@ -203,8 +206,61 @@ function devMenu() {
   return `<div class="dev-menu" role="menu">
     <div class="dev-menu-head">Developer</div>
     <button role="menuitem" data-action="dev-player-state">${icon(dev.copied === 'player' ? 'check' : 'copy')}<span>${dev.copied === 'player' ? 'Copied' : 'Copy player state'}</span></button>
+    <button role="menuitem" data-action="dev-why">${icon('target')}<span>Why isn’t this farming?</span></button>
     <button role="menuitem" data-action="dev-inspect" data-id="player">${icon('eyeScan')}<span>Inspect stream</span></button>
     ${kick ? `<button role="menuitem" data-action="dev-inspect" data-id="kick">${icon('eyeScan')}<span>Inspect Kick page</span></button>` : ''}
+  </div>`;
+}
+
+// ------------------------------------------------------------------ Why isn't this farming?
+
+const WHY_MARK = { true: ['y', 'check'], false: ['x', 'x'], null: ['n', null] };
+
+async function loadWhy() {
+  const why = await window.pd.developer.why(dev.whyId).catch(() => null);
+  if (ui.modal !== 'why') return;
+  dev.why = why;
+  render();
+}
+
+/** The checks as text, for Copy. */
+function whyText(w) {
+  const mark = (ok) => (ok === true ? '✓' : ok === false ? '✗' : '–');
+  return [
+    `Why isn't this farming? · ${new Date(w.at).toLocaleString()}`,
+    w.drop ? `${w.drop.name}${w.drop.category ? ` · ${w.drop.category}` : ''}` : 'No drop',
+    ...w.checks.map((k) => `${mark(k.ok)} ${k.text}${k.note ? ` (${k.note})` : ''}`),
+    `${w.verdict.farming ? 'Farming' : 'Not farming'}: ${w.verdict.text}`,
+  ].join('\n');
+}
+
+/** The dialog: the farmer's checks for one drop, in order, and the first that failed. ‹ › step through the queue's drops. */
+function whyModal() {
+  const w = dev.why;
+  const at = w?.drop ? w.drops.findIndex((d) => d.id === w.drop.id) : -1;
+  const step = (dir, ic, tip, off) => `<button class="btn sm icon-only ghost" data-action="dev-why-step" data-dir="${dir}" data-tip="${tip}" ${off ? 'disabled' : ''}>${icon(ic)}</button>`;
+  const about = w
+    ? `<div class="why-about"><div class="why-drop"><b>${esc(w.drop?.name ?? 'No drop to farm')}</b><span>${esc(w.drop?.category ?? 'Nothing in the queue')}${w.stream ? ` · watching ${esc(w.stream.username)}` : ''}</span></div>
+        ${w.drops.length > 1 ? `<span class="why-count num">${at + 1} of ${w.drops.length}</span>${step(-1, 'chevronLeft', 'The drop before it in the queue', at <= 0)}${step(1, 'chevronRight', 'The next drop in the queue', at === -1 || at >= w.drops.length - 1)}` : ''}</div>`
+    : '';
+  const checks = w
+    ? `<div class="why-checks">${w.checks
+        .map((k) => {
+          const [tone, ic] = WHY_MARK[k.ok];
+          return `<div class="why-row why-${tone}"><span class="why-m">${ic ? icon(ic) : '–'}</span><span class="why-t">${esc(k.text)}${k.note ? `<small>${esc(k.note)}</small>` : ''}</span></div>`;
+        })
+        .join('')}</div>
+      <div class="why-verdict ${w.verdict.farming ? 'ok' : ''}"><b>${w.verdict.farming ? 'Farming' : 'Not farming'}:</b> ${esc(w.verdict.text)}</div>`
+    : '<div class="why-checks"><div class="spinner"></div></div>';
+  const copied = dev.copied === 'why';
+  return `<div class="modal-backdrop" data-action="close-modal">
+    <div class="modal why" data-stop role="dialog" aria-modal="true" aria-labelledby="why-title">
+      <div class="modal-head"><h3 id="why-title">Why isn’t this farming?</h3><button class="btn sm icon-only ghost" data-action="close-modal" data-tip="Close (Esc)">${icon('x')}</button></div>
+      <div class="modal-section">${about}${checks}</div>
+      <div class="modal-foot"><span class="why-foot">The farmer’s checks, in the order it makes them</span><span class="spacer"></span>
+        <button class="btn sm" data-action="dev-why-copy" ${w ? '' : 'disabled'}>${icon(copied ? 'check' : 'copy')} ${copied ? 'Copied' : 'Copy'}</button>
+        <button class="btn sm primary" data-action="close-modal">Close</button></div>
+    </div>
   </div>`;
 }
 
@@ -293,6 +349,22 @@ const developerActions = {
     render();
   },
   'dev-player-state': async () => devCopy(await window.pd.developer.playerState(), 'player'),
+  'dev-why': () => {
+    dev.menu = false;
+    dev.why = null;
+    dev.whyId = null;
+    openModal('why');
+    loadWhy();
+  },
+  'dev-why-step': (el) => {
+    const w = dev.why;
+    const at = w?.drops.findIndex((d) => d.id === w.drop?.id) ?? -1;
+    const next = w?.drops[at + Number(el.dataset.dir)];
+    if (!next) return;
+    dev.whyId = next.id;
+    loadWhy();
+  },
+  'dev-why-copy': () => dev.why && devCopy(whyText(dev.why), 'why'),
   'dev-inspect': async (el) => {
     dev.menu = false;
     render();

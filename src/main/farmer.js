@@ -130,6 +130,7 @@ class Farmer extends EventEmitter {
     this.direct = new Map(); // channel slug -> { at, ls }: a drop's channel asked about by itself (ls null: offline)
     this.followedLive = null; // { at, live: Set } from the follow list: who's live among the channels you follow
     this.blacklist = new Map(); // slug -> until
+    this.skipWhy = new Map(); // slug -> why it's skipped (block())
     this.availability = new Availability(); // how often each queue row has a stream live
     this.claimBackoff = new Map(); // rewardId -> until
     this.claimErrors = new Map(); // rewardId -> { type, text, connectUrl, at }: why Kick last refused it
@@ -255,6 +256,9 @@ class Farmer extends EventEmitter {
       await this.refresh({ force });
       if (this.store.get().autoClaim) await this.claimReady();
       if (!this.paused) await this.decide();
+      // Kick answers again: a stream that carried on through the failed refresh is farming again
+      // (decide() only sets the status when it picks a stream).
+      if (this.status.code === 'error' && this.current) this.setStatus('farming', `Watching ${this.current.username}`);
       this.failedTicks = 0;
       this.checked(true);
     } catch (err) {
@@ -1231,7 +1235,7 @@ class Farmer extends EventEmitter {
       }
       if (reason.kind !== 'offline') this.setNotice('switch', `Left ${cur.username}: ${reason.text.toLowerCase()}`, cur);
       this.addLog('switch', `${reason.text}, leaving ${cur.username}`);
-      if (reason.block) this.blacklist.set(cur.slug, now + reason.block);
+      if (reason.block) this.block(cur.slug, now + reason.block, reason.text);
       this.stopWatching(reason.text);
       this.buildModel();
     }
@@ -1300,15 +1304,7 @@ class Farmer extends EventEmitter {
       // Settings › Farming › Switch streams for (30 min by default) less expected live time left.
       const smartHop = settings.queueMode !== 'smart' || first?.urgent || !curCat || first.liveEnd < curCat.liveEnd - (settings.smartHopMinutes ?? 30) * MIN;
       if (first && first.id !== cur.targetId && order.indexOf(first.id) < order.indexOf(cur.targetId) && smartHop) {
-        const smart = settings.queueMode === 'smart';
-        let why;
-        if (first.urgent) why = `${first.urgent.campaign} ends in ${fmtSpan(first.urgent.msLeft)} with ${first.urgent.remaining} min to go (${fmtSpan(Math.max(0, first.urgent.slack))} to spare)`;
-        else if (smart && first.rarityCounts) why = `${first.name} is rarely live (${liveShare(first, now)}) and is on now (it ends in ${fmtSpan(first.soonestEnd - now)}`;
-        else if (smart) why = `${first.name} ends sooner (${fmtSpan(first.soonestEnd - now)}`;
-        else why = `${first.name} is higher in your queue`;
-        const curEnd = curCat ? Math.min(...curCat.campaigns.filter((c) => c.needsWatching).map((c) => new Date(c.endsAt).getTime())) : null;
-        const versus = smart && !first.urgent ? ` vs ${curCat?.name ?? 'now'} ${curEnd ? fmtSpan(curEnd - now) : ''})` : curEnd ? ` vs ${curCat.name} (${fmtSpan(curEnd - now)} left)` : '';
-        return { kind: 'priority', text: `${why}${versus}`, to: first };
+        return { kind: 'priority', text: this.rankReason(first, curCat, now, settings), to: first };
       }
     }
 
@@ -1360,7 +1356,7 @@ class Farmer extends EventEmitter {
           return;
         }
         skipped.push(stream.username);
-        this.blacklist.set(stream.slug, Date.now() + 20 * MIN);
+        this.block(stream.slug, Date.now() + 20 * MIN, 'Kick said it doesn’t count for the drop');
         this.addLog('warn', `${stream.username} is not eligible for drops right now, skipping`);
         this.record('not-eligible', { slug: stream.slug, channel: stream.username, avatar: stream.avatar, ...rowCtx(cat), text: `${stream.username} isn't eligible for ${cat.name} right now` });
       }
@@ -1376,28 +1372,59 @@ class Farmer extends EventEmitter {
     for (const stream of cat.streams.filter((s) => !s.blocked).slice(0, 4)) {
       const campaignIds = await this.verifyEligible(stream, cat);
       if (campaignIds.length) return { stream, campaignIds, skipped };
-      this.blacklist.set(stream.slug, Date.now() + 20 * MIN);
+      this.block(stream.slug, Date.now() + 20 * MIN, 'Kick said it doesn’t count for the drop');
       skipped.push(stream.username);
     }
     this.buildModel();
     return null;
   }
 
-  /** Why this stream (and this category) was chosen, for the history. */
-  recordPick(stream, cat, campaignIds, skipped, targets) {
+  /**
+   * Why queue row `first` goes before `other` (the one being watched): the words of a switch in
+   * the history, and of Why isn't this farming?
+   */
+  rankReason(first, other, now, settings) {
+    const smart = settings.queueMode === 'smart';
+    let why;
+    if (first.urgent) why = `${first.urgent.campaign} ends in ${fmtSpan(first.urgent.msLeft)} with ${first.urgent.remaining} min to go (${fmtSpan(Math.max(0, first.urgent.slack))} to spare)`;
+    else if (smart && first.rarityCounts) why = `${first.name} is rarely live (${liveShare(first, now)}) and is on now (it ends in ${fmtSpan(first.soonestEnd - now)}`;
+    else if (smart) why = `${first.name} ends sooner (${fmtSpan(first.soonestEnd - now)}`;
+    else why = `${first.name} is higher in your queue`;
+    const otherEnd = other ? Math.min(...other.campaigns.filter((c) => c.needsWatching).map((c) => new Date(c.endsAt).getTime())) : null;
+    const versus = smart && !first.urgent ? ` vs ${other?.name ?? 'now'} ${otherEnd ? fmtSpan(otherEnd - now) : ''})` : otherEnd ? ` vs ${other.name} (${fmtSpan(otherEnd - now)} left)` : '';
+    return `${why}${versus}`;
+  }
+
+  /** Why this stream (and its queue row) is picked: the reasons, in order. */
+  pickReasons(stream, cat, campaignIds, targets, now = Date.now()) {
     const reasons = [];
+    const smart = this.store.get().queueMode === 'smart';
     if (cat.urgent) reasons.push(`${cat.urgent.campaign} ends in ${fmtSpan(cat.urgent.msLeft)} and needs ${cat.urgent.remaining} min`);
     else if (targets[0]?.id !== cat.id) reasons.push(`${targets.filter((c) => c.id !== cat.id && c.streams.every((s) => s.blocked)).map((c) => c.name).join(', ') || 'higher categories'} had no usable stream`);
-    else if (this.store.get().queueMode === 'smart' && cat.rarityCounts) reasons.push(`it's rarely live (${liveShare(cat)}), so it's caught while it's on (${fmtSpan(cat.soonestEnd - Date.now())} left)`);
-    else if (this.store.get().queueMode === 'smart') reasons.push(`it ends soonest (${fmtSpan(cat.soonestEnd - Date.now())} left)`);
+    else if (smart && cat.rarityCounts) reasons.push(`it's rarely live (${liveShare(cat, now)}), so it's caught while it's on (${fmtSpan(cat.soonestEnd - now)} left)`);
+    else if (smart) reasons.push(`it ends soonest (${fmtSpan(cat.soonestEnd - now)} left)`);
     else reasons.push(`top of your queue`);
     if (stream.followed) reasons.push('a channel you follow');
     if (campaignIds.length > 1) reasons.push(`counts for ${campaignIds.length} drops at once`);
     reasons.push(`${stream.viewers} viewers`);
+    return reasons;
+  }
+
+  /** Why this stream (and this category) was chosen, for the history. */
+  recordPick(stream, cat, campaignIds, skipped, targets) {
+    const reasons = this.pickReasons(stream, cat, campaignIds, targets);
+    // Kept for the stream it's about to watch (startWatching), for Why isn't this farming?
+    this.pickWhy = { slug: stream.slug, text: reasons.join(', ') };
     const alternatives = cat.streams.filter((s) => !s.blocked && s.slug !== stream.slug).length;
     const text = `Picked ${stream.username} for ${cat.name}: ${reasons.join(', ')}${skipped.length ? `; skipped ${skipped.join(', ')} (not eligible)` : ''}${alternatives ? ` · ${alternatives} other live option${alternatives > 1 ? 's' : ''}` : ''}`;
     this.addLog('info', text);
     this.record('decision', { slug: stream.slug, channel: stream.username, avatar: stream.avatar, ...rowCtx(cat), campaignIds, ...(campaignIds[0] ? { campaignId: campaignIds[0], campaign: this.ctx(campaignIds[0]).campaign } : {}), text });
+  }
+
+  /** Skips a stream until `until`, and remembers why (for Why isn't this farming?). */
+  block(slug, until, why) {
+    this.blacklist.set(slug, until);
+    this.skipWhy.set(slug, why);
   }
 
   async verifyEligible(stream, cat) {
@@ -1431,8 +1458,11 @@ class Farmer extends EventEmitter {
       reloads: 0,
       credited: 0,
       manual,
+      // Why it was picked (recordPick), for Why isn't this farming?
+      pickedWhy: manual ? 'picked by you' : this.pickWhy?.slug === stream.slug ? this.pickWhy.text : null,
       session: `${now.toString(36)}-${stream.slug}`,
     };
+    this.pickWhy = null;
     // At the same time as the watch: a quick restart carries on from this event's time.
     this.record('watch-start', {
       t: now,
@@ -1478,7 +1508,7 @@ class Farmer extends EventEmitter {
   async skip() {
     if (!this.current) return this.tick();
     this.addLog('switch', `Skipped ${this.current.username}`);
-    this.blacklist.set(this.current.slug, Date.now() + 30 * MIN);
+    this.block(this.current.slug, Date.now() + 30 * MIN, 'Skipped by you');
     this.stopWatching('Skipped by you');
     this.buildModel();
     await this.pickStream();
@@ -1494,7 +1524,7 @@ class Farmer extends EventEmitter {
     if (cur.crashes.length >= MAX_CRASHES) {
       this.addLog('switch', `${cur.username} failed ${cur.crashes.length} times (${reason}), switching stream`);
       this.setNotice('switch', `${cur.username} kept failing (${reason})`, cur);
-      this.blacklist.set(cur.slug, now + 30 * MIN);
+      this.block(cur.slug, now + 30 * MIN, `Kept failing (${reason})`);
       this.stopWatching(`Kept failing (${reason})`);
       this.buildModel();
       this.pickStream().finally(() => this.changed());
@@ -1518,7 +1548,7 @@ class Farmer extends EventEmitter {
     this.addLog('switch', `${text}, switching stream`);
     this.record('offline', { ...this.streamCtx(cur), text });
     this.setNotice(to ? 'raid' : 'ended', to ? `${cur.username} raided ${to}` : `${cur.username} ended the stream`, cur);
-    this.blacklist.set(cur.slug, Date.now() + 10 * MIN);
+    this.block(cur.slug, Date.now() + 10 * MIN, 'The stream ended');
     this.stopWatching('Stream ended');
     this.buildModel();
     this.pickStream().finally(() => this.changed());
@@ -1588,6 +1618,130 @@ class Farmer extends EventEmitter {
     const movedAt = Math.max(ws.lastAdvanceAt ?? 0, ws.loadedAt);
     if (now - movedAt > FROZEN_MS) return { state: 'frozen', text: `The picture hasn't moved for ${Math.round((now - movedAt) / 1000)}s` };
     return { state: 'playing', text: 'Playing' };
+  }
+
+  // ------------------------------------------------------------------ why
+
+  /**
+   * Why isn't this farming? (Settings › Developer › Developer tools): the farmer's checks for one
+   * drop, in the order it makes them, from what it already knows (nothing is asked of Kick). The
+   * drop asked about (`campaignId`), else the one being watched, else the first in the queue still
+   * to watch. Each check is ok (true), failed (false) or not reached (null); the verdict is the
+   * first that failed. `drops` are the ones it can be asked about, in queue order.
+   */
+  explain({ signedIn = true, campaignId = null } = {}, now = Date.now()) {
+    const settings = this.store.get();
+    const cur = this.current;
+    const { categories, campaigns } = this.model;
+    const checks = [];
+    const add = (step, ok, text, note) => checks.push({ step, ok, text, ...(note ? { note } : {}) });
+    const ago = (t) => (now - t < MIN ? `${Math.max(0, Math.round((now - t) / 1000))}s ago` : `${fmtSpan(now - t)} ago`);
+    const rowOf = (c) => c && categories.find((r) => r.campaigns.some((k) => k.id === c.id));
+    const open = (r) => r.campaigns.find((c) => c.needsWatching);
+
+    // 1. Running, signed in, and reaching Kick.
+    if (!signedIn) add('state', false, 'Not signed in to Kick', 'Sign in to start farming');
+    else if (this.paused) add('state', false, 'Paused', 'Resume to keep collecting drops');
+    else if (!this.running) add('state', false, 'Farming hasn’t started yet');
+    else if (this.status.code === 'error') add('state', false, this.status.message);
+    else add('state', true, 'Running and signed in', this.checkedAt ? `Last checked with Kick ${ago(this.checkedAt)}` : 'Checking with Kick for the first time');
+
+    // 2. The drop: active, with rewards you collect, and its queue row switched on.
+    const watched = cur && campaigns.find((c) => cur.campaignIds.includes(c.id));
+    const firstOn = this.targetCategories()[0];
+    const firstOff = categories.find((r) => r.needsWatching);
+    const c = campaigns.find((k) => k.id === campaignId) ?? watched ?? (firstOn && open(firstOn)) ?? (firstOff && open(firstOff)) ?? campaigns.find((k) => !k.complete) ?? campaigns[0] ?? null;
+    const row = rowOf(c);
+    const gameOnly = settings.includeGameDrops
+      ? 0
+      : this.rawCampaigns.filter((k) => k.category?.id && k.status !== 'expired' && new Date(k.starts_at) <= now && new Date(k.ends_at) > now && !campaigns.some((x) => x.id === k.id)).length;
+    const gameNote = gameOnly ? `${gameOnly} game drop${gameOnly > 1 ? 's' : ''} left out (Settings › Farming › Include game drops)` : '';
+    if (!c) add('drop', false, 'No active drop with emotes or badges', gameNote);
+    else if (row && !row.enabled) add('drop', false, `${row.name} is switched off in your queue`, 'Its switch in the Queue tab');
+    else {
+      const games = c.rewards.filter((r) => !r.tracked).length;
+      add('drop', true, `${c.name} is active (ends in ${fmtSpan(new Date(c.endsAt).getTime() - now)})`, games ? `${games} game reward${games > 1 ? 's' : ''} in it left out (Settings › Farming › Include game drops)` : '');
+    }
+
+    // 3. A reward still needs watch time, rather than a claim.
+    if (!c) add('reward', null, 'No reward to look at');
+    else if (c.needsWatching && c.next) add('reward', true, `${c.next.name} needs ${c.next.remaining} more min`, `${c.units} of ${c.next.required} min watched`);
+    else {
+      const ready = c.rewards.filter((r) => r.tracked && r.ready);
+      const refused = ready.find((r) => r.claimError);
+      const retry = refused && this.claimBackoff.get(refused.id);
+      if (refused) add('reward', false, `Kick refused the claim for ${refused.name}: ${refused.claimError.text}`, Number.isFinite(retry) ? `Trying again in ${fmtSpan(Math.max(0, retry - now))}` : 'It won’t be tried again');
+      else if (ready.length && !settings.autoClaim) add('reward', false, `${ready[0].name} is waiting to be claimed`, 'Claim drops automatically is off: claim it on its card');
+      else if (ready.length) add('reward', false, `${ready[0].name} is being claimed`, 'It’s unlocked: no more watch time needed');
+      else add('reward', false, 'Every reward in it is claimed');
+    }
+
+    // 4. A live stream in its category that counts for it, and isn't skipped for a while.
+    // The drop asked about is the one being watched.
+    const mine = !!c && !!cur?.campaignIds.includes(c.id);
+    const skipNote = (list) =>
+      list
+        .slice(0, 3)
+        .map((s) => `${s.username}: ${(this.skipWhy.get(s.slug) ?? 'skipped').replace(/^./, (x) => x.toLowerCase())}, for ${fmtSpan((this.blacklist.get(s.slug) ?? now) - now)} more`)
+        .join(' · ');
+    let liveCount = 0;
+    if (mine) {
+      liveCount = 1;
+      add('stream', true, `${cur.username} is live in ${cur.categoryName}`, `Kick confirmed it counts for the drop ${ago(cur.eligibleCheckedAt ?? cur.startedWatchingAt)}`);
+    } else if (!c?.needsWatching || !row) add('stream', null, 'No stream needed');
+    else if (!row.enabled) add('stream', null, 'Not looked for while its row is switched off');
+    else if (!row.streamsLoaded && !row.streams.length) add('stream', null, `${row.category.name}’s live streams haven’t been checked yet`);
+    else {
+      // From the skip list itself: a stream skipped since the queue was last built counts as skipped.
+      const isBlocked = (s) => (this.blacklist.get(s.slug) ?? 0) > now;
+      const usable = row.streams.filter((s) => !isBlocked(s));
+      const blocked = row.streams.filter(isBlocked);
+      liveCount = usable.length;
+      if (!row.streams.length) add('stream', false, row.kind === 'category' ? `Nothing live in ${row.category.name} counts for it` : `None of its channels are live in ${row.category.name}`, row.kind === 'category' ? '' : row.channels.slice(0, 4).map((ch) => ch.username ?? ch.slug).join(', '));
+      else if (!usable.length) add('stream', false, `${blocked.length} live, but each is skipped for a while`, skipNote(blocked));
+      else add('stream', true, `${usable.length} live stream${usable.length > 1 ? 's' : ''} in ${row.category.name} count${usable.length > 1 ? '' : 's'} for it`, blocked.length ? `Skipped: ${skipNote(blocked)}` : '');
+    }
+
+    // 5. Why this stream, or why another drop is being watched instead.
+    if (mine) add('pick', true, `Picked ${cur.username}${cur.pickedWhy ? `: ${cur.pickedWhy}` : ''}`);
+    else if (!liveCount) add('pick', null, 'No stream to pick');
+    else if (cur) {
+      const curRow = categories.find((r) => r.id === cur.targetId);
+      const ahead = curRow && categories.indexOf(curRow) < categories.indexOf(row);
+      const note = cur.manual
+        ? 'You picked it'
+        : ahead
+          ? this.rankReason(curRow, row, now, settings)
+          : settings.queueMode === 'smart'
+            ? `Smart order switches for at least ${settings.smartHopMinutes ?? 30} min less expected live time left`
+            : 'It switches at the next check';
+      add('pick', false, `Watching ${cur.username} for ${cur.targetName} instead`, note);
+    } else if (this.paused || !signedIn) add('pick', null, `Nothing is picked while ${signedIn ? 'it’s paused' : 'signed out'}`);
+    else add('pick', null, 'A stream is picked at the next check', this.nextTickAt ? `In ${Math.max(0, Math.round((this.nextTickAt - now) / 1000))}s` : '');
+
+    // 6. Watch events arriving, and being credited.
+    const ws = this.watcher.status ?? {};
+    const health = mine ? this.health(now) : null;
+    const quiet = mine ? now - cur.lastProgressAt : 0;
+    if (!mine) add('credit', null, 'Not watching it yet');
+    else if (this.eventsSinceCredit >= CONFLICT_EVENTS) add('credit', false, `${this.eventsSinceCredit} watch events with no credit: another Kick stream on your account is taking it`, 'Kick credits one stream per account: close the others');
+    else if (quiet > settings.stallMinutes * MIN) add('credit', false, `No credit for ${fmtSpan(quiet)}`, cur.stallReloaded ? 'Reloaded once: it moves to another stream next' : 'It reloads the player next');
+    else if (health && health.state !== 'playing') add('credit', false, health.text);
+    else if (!ws.lastEventAt) add('credit', true, 'Playing: the first watch event comes about 2 min in', `Last credit ${ago(cur.lastProgressAt)}`);
+    else add('credit', true, `Watch events are arriving (last ${ago(ws.lastEventAt)}) and being credited (last ${ago(cur.lastProgressAt)})`, this.eventsSinceCredit ? `${this.eventsSinceCredit} since the last credit (it warns at ${CONFLICT_EVENTS})` : '');
+
+    const failed = checks.find((k) => k.ok === false);
+    const farming = !failed && !!mine;
+    const waiting = checks.find((k) => k.ok === null);
+    const drops = categories.flatMap((r) => r.campaigns.filter((k) => k.needsWatching || k === c));
+    return {
+      at: now,
+      drops: drops.map((k) => ({ id: k.id, name: k.name })),
+      drop: c && { id: c.id, name: c.name, category: row?.category.name ?? null },
+      stream: cur ? { slug: cur.slug, username: cur.username } : null,
+      checks,
+      verdict: { farming, text: failed?.text ?? (farming ? `It’s farming ${c.name} on ${cur.username}` : (waiting?.text ?? 'Nothing failed')) },
+    };
   }
 
   /** After the computer sleeps the page and socket are usually dead. */

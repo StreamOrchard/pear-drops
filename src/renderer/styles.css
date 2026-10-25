@@ -6684,3 +6684,117 @@ button.act-row:hover,
   height: 15px;
   color: var(--text-2);
 }
+
+/* Why isn't this farming? (developer.js): the farmer's checks for a drop, in order, and the first that failed. */
+button.status-pill {
+  font-family: var(--font);
+  cursor: pointer;
+  transition: border-color 0.15s, filter 0.15s;
+}
+button.status-pill:hover {
+  border-color: var(--border-2);
+  filter: brightness(1.15);
+}
+.modal.why {
+  width: min(560px, 92vw);
+}
+.why-about {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+.why-drop {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.why-drop b,
+.why-drop span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.why-drop b {
+  font-size: 14px;
+}
+.why-drop span,
+.why-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+.why-count {
+  margin-right: 4px;
+}
+.why-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.why-checks .spinner {
+  margin: 30px auto;
+}
+.why-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.why-row small {
+  display: block;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.why-m {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-weight: 800;
+}
+.why-m .icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 3;
+}
+.why-y .why-m {
+  color: var(--green);
+  background: var(--green-soft);
+}
+.why-x .why-m {
+  color: var(--red);
+  background: rgba(255, 93, 110, 0.14);
+}
+.why-n {
+  color: var(--muted);
+}
+.why-n .why-m {
+  color: var(--faint);
+  background: var(--surface-2);
+}
+.why-verdict {
+  margin: 16px 0 4px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--amber);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: rgba(251, 191, 75, 0.08);
+  font-size: 13px;
+}
+.why-verdict.ok {
+  border-left-color: var(--green);
+  background: var(--green-soft);
+}
+.why-foot {
+  color: var(--muted);
+  font-size: 12px;
+}

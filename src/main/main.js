@@ -821,7 +821,7 @@ function registerIpc() {
   mainIpc.handle('player:bounds', (_e, rect) => watcher.setBounds(rectArg(rect)));
   mainIpc.handle('player:spec', () => watcher.spec);
   mainIpc.handle('player:attached', (_e, role, gen, id) => watcher.attach(String(role), Number(gen), Number(id)));
-  // Settings › Developer: its lists a page at a time, the report, Copy player state, Inspect.
+  // Settings › Developer: its lists a page at a time, the report, Copy player state, Why isn't this farming?, Inspect.
   mainIpc.handle('dev:page', (_e, list, opts) => {
     const o = opts && typeof opts === 'object' ? opts : {};
     const page = devLog.page(['errors', 'requests', 'watch'].includes(list) ? list : 'errors', {
@@ -839,6 +839,8 @@ function registerIpc() {
   });
   mainIpc.handle('dev:report', () => diagnosticsReport());
   mainIpc.handle('dev:player-state', () => playerState({ farm: auth.status === 'signed-in' ? farmer.snapshot() : null, settings: store.get() }));
+  // Why isn't this farming?: the farmer's checks for a drop (the one being watched, unless asked about another).
+  mainIpc.handle('dev:why', (_e, campaignId) => farmer.explain({ signedIn: auth.status === 'signed-in', campaignId: ['string', 'number'].includes(typeof campaignId) ? campaignId : null }));
   // Saved straight to Downloads (no system save dialog), then shown in its folder if asked.
   mainIpc.handle('dev:save', () => {
     const d = new Date();

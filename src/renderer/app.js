@@ -1,4 +1,4 @@
-/* global commands, palette, initPalette, initPaletteItems, developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
+/* global commands, palette, initPalette, initPaletteItems, developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, whyModal, loadWhy, rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
 
 let state = null;
 const ui = {
@@ -138,7 +138,13 @@ function renderTitlebar() {
   );
   const s = statusInfo();
   const dot = s.cls === 'farming' ? '<span class="live-dot green"></span>' : '<span class="status-dot"></span>';
-  setHTML($('#status-pill'), `<div class="status-pill ${s.cls}">${dot}<span class="label">${esc(s.text)}</span></div>`);
+  // With Developer tools on, it opens Why isn't this farming?
+  setHTML(
+    $('#status-pill'),
+    state.settings?.developerTools === true
+      ? `<button class="status-pill ${s.cls}" data-action="dev-why" data-tip="Why isn’t this farming?">${dot}<span class="label">${esc(s.text)}</span></button>`
+      : `<div class="status-pill ${s.cls}">${dot}<span class="label">${esc(s.text)}</span></div>`,
+  );
 
   const user = state.auth.user;
   const next = f?.nextTickAt ? Math.max(0, f.nextTickAt - Date.now()) : 0;
@@ -1477,6 +1483,7 @@ async function replayReward(card, id, tile) {
 function renderModal() {
   const root = $('#modal-root');
   if (ui.modal === 'whatsnew') return setHTML(root, whatsNewModal());
+  if (ui.modal === 'why') return setHTML(root, whyModal());
   if (ui.modal !== 'settings') return setHTML(root, '');
   const s = state.settings;
   const user = state.auth.user;
@@ -1627,6 +1634,7 @@ function closeModal() {
   ui.modal = null;
   act.app = null;
   dev.data = null; // Settings › Developer: fetched afresh when it opens again
+  dev.why = null;
   render();
 }
 
@@ -2146,6 +2154,8 @@ window.addEventListener('palette-recent', () => render());
 window.pd.onState((next) => {
   state = next;
   render();
+  // Why isn't this farming? follows what the farmer does while it's open.
+  if (ui.modal === 'why') loadWhy();
 });
 // Coming soon doesn't move on while the pointer is on it.
 document.addEventListener('pointerover', (e) => (ui.comingHover = !!e.target.closest?.('.coming')));
