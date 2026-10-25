@@ -238,10 +238,14 @@ test('an event’s crate filling: a tab of its own, in its colours; its page say
   assert.match(text, /New one daily until/);
   assert.match(await a.win.textContent('.dr-pop .dr-claim'), /Claim in 1h 08m/);
   assert.match(await a.win.textContent('.dr-pop .dr-won'), /Won this event\s*2\s*2 of 8 days/);
-  const tiles = await a.win.$$eval('.dr-pop .dr-won-tile', (els) => els.map((e) => (e.classList.contains('empty') ? '' : e.querySelector('small').textContent)));
+  const tiles = await a.win.$$eval('.dr-pop .dr-won-tile', (els) => els.map((e) => (e.classList.contains('open') ? '' : e.querySelector('small').textContent)));
   assert.equal(tiles.length, 8, 'a slot a day');
   assert.equal(tiles[0], 'Yesterday');
   assert.deepEqual(tiles.slice(2), ['', '', '', '', '', ''], 'the days still to come');
+  const sizes = await a.win.$$eval('.dr-pop .dr-won-tile', (els) => els.map((e) => `${e.offsetWidth}x${e.offsetHeight}`));
+  assert.equal(new Set(sizes).size, 1, `every slot the same square: ${sizes}`);
+  assert.match(sizes[0], /^(\d+)x\1$/, 'square');
+  assert.equal(await a.win.$eval('.dr-pop .dr-head', (e) => getComputedStyle(e).backgroundColor), 'rgba(0, 0, 0, 0)', 'no bar behind the tabs');
   assert.match(await a.win.getAttribute('.dr-pop .dr-won-tile', 'data-tip'), /^[A-Z][\w ]+ · \w+ (emote|badge) · Yesterday$/);
   assert.equal(await a.win.evaluate(() => document.querySelector('.dr-pop').scrollHeight - document.querySelector('.dr-pop').clientHeight), 0, 'the card still fits');
   await a.win.keyboard.press('Escape');
