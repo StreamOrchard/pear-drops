@@ -231,3 +231,15 @@ test('a second line’s words count: text, or its parts', () => {
   commands.add({ id: uid('sub'), title: 'Plain', sub: ['Settings › Farming', { b: 'Marmot', t: '' }] });
   assert.ok(titles(commands.search('marmot')).includes('Plain'));
 });
+
+test('with only a prefix typed, groups come in the order given, the others after them A–Z', () => {
+  commands.add([
+    { id: uid('g'), kind: 'action', group: 'Zed group', title: 'Gnu a' },
+    { id: uid('g'), kind: 'action', group: 'Alpha group', title: 'Gnu b' },
+    { id: uid('g'), kind: 'action', group: 'Mid group', title: 'Gnu c' },
+  ]);
+  commands.order(['Zed group']);
+  const groups = [...commands.search('>')].map((r) => r.item.group).filter((g) => g.endsWith(' group'));
+  assert.deepEqual([...new Set(groups)], ['Zed group', 'Alpha group', 'Mid group']);
+  commands.order([]);
+});

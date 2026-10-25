@@ -706,6 +706,8 @@ function initPaletteItems() {
     { id: 'logout', group: 'Account', title: 'Sign out of Kick', sub: () => state.auth.user?.username ?? '', words: ['log out'], icon: 'logout', when: () => state?.auth?.status === 'signed-in', run: () => runAction('logout') },
     { id: 'quit', group: 'Account', title: 'Quit Pear Drops', sub: 'Stops farming', words: ['exit', 'close'], icon: 'power', last: true, run: () => window.pd.quit() },
   ]);
+  // With only a prefix typed, what's used most comes first, and the account and Quit last.
+  commands.order(['Farming', 'Drops', 'Watching', 'Channels', 'Rewards', 'Stream panel', 'Daily reward', 'Places', 'Streams tab', 'Coming soon', 'Settings', 'Settings pages', 'Notifications', 'Updates', 'Your data', 'Connected apps', 'Developer', 'Activity', 'History', 'Done', 'Account']);
   commands.provide('drops', () => {
     const fa = farm();
     if (!fa) return [];

@@ -185,7 +185,7 @@ function palRight(r, sel) {
   const chip = commands.value(it.chip);
   if (chip) return palPill(typeof chip === 'string' ? { text: chip } : chip);
   if (it.keys) return palKeys(it.keys);
-  return `<span class="pal-go ${sel ? 'on' : ''}">${palKbd('↵')} ${esc(it.verb || 'Open')}</span>`;
+  return `<span class="pal-go ${sel ? 'on' : ''}">${palKbd('↵')} ${esc(it.verb || (['place', 'page', 'drop'].includes(it.kind) ? 'Open' : 'Run'))}</span>`;
 }
 function palRowHTML(r, i) {
   const it = r.item;

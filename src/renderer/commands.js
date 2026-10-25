@@ -35,6 +35,7 @@ const cmdProviders = new Map(); // name -> fn(q)
 const cmdSeen = new Map(); // id -> the last item a provider gave with that id (so Recent can find it again)
 let cmdMem = { recent: [], used: {} };
 let cmdSave = () => {};
+let cmdGroups = []; // the order groups are listed in with nothing typed (a prefix on its own): the rest after, A–Z
 
 const cmdOn = (it) => {
   try {
@@ -170,7 +171,7 @@ function searchCommands(text, { scope = '', only = null, keep = false, now = Dat
   // Ties: the shorter title first; with nothing typed (a prefix on its own), by group, then A–Z. Quit is never first.
   const tie = p.q
     ? (a, b) => a.item.title.length - b.item.title.length || a.item.title.localeCompare(b.item.title)
-    : (a, b) => String(a.item.group).localeCompare(String(b.item.group)) || a.item.title.localeCompare(b.item.title, undefined, { numeric: true });
+    : (a, b) => groupAt(a.item.group) - groupAt(b.item.group) || String(a.item.group).localeCompare(String(b.item.group)) || a.item.title.localeCompare(b.item.title, undefined, { numeric: true });
   if (!only || p.q) scored.sort((a, b) => !!a.item.last - !!b.item.last || b.score - a.score || tie(a, b));
   // When something matches well, letters scattered through other names (or second lines) don't count.
   const best = Math.max(0, ...scored.map((r) => r.match));
@@ -186,6 +187,14 @@ function searchCommands(text, { scope = '', only = null, keep = false, now = Dat
     if (!only && !p.scope && out.length >= CMD_MAX) break;
   }
   return out;
+}
+const groupAt = (g) => {
+  const i = cmdGroups.indexOf(g);
+  return i < 0 ? cmdGroups.length : i;
+};
+/** The order groups are listed in with only a prefix typed. */
+function orderGroups(groups) {
+  cmdGroups = [...groups];
 }
 /** When nothing is found: what's still worth offering for the words (Search History for "xyz"…), in their order. */
 const cmdFallbacks = (text) =>
@@ -241,6 +250,7 @@ const commands = {
   search: searchCommands,
   fallbacks: cmdFallbacks,
   grouped: cmdGrouped,
+  order: orderGroups,
   run: runCommand,
   parse: parseQuery,
   disabledWhy: cmdWhy,
