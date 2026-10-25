@@ -174,3 +174,37 @@ test('the stand-in rewards list names each event prize won, by event and day; a 
   assert.deepEqual([data.winner.watch_time.watch_time_minutes, data.winner.watch_time.next_level_badge.metadata.level], [30, 43]);
   assert.equal((await api.rewards()).data.rewards.length, 4, 'watch time isn’t a reward in the list');
 });
+
+test('the stand-in tells Settings › Developer about each call as Kick’s would be asked, and a test can fail the next one', async () => {
+  const { api } = createDemo();
+  const notes = [];
+  api.onRequest = (r) => notes.push(r);
+  await api.progress();
+  api.keepAnswers = true;
+  await api.channelInfo('pixelpear');
+  api.failNext('campaigns', 503);
+  await assert.rejects(api.campaigns(), (err) => err.status === 503);
+  assert.ok(Array.isArray(await api.campaigns()), 'only the next one fails');
+  api.failNext('me', 0);
+  await assert.rejects(api.me(), (err) => err.status === 0);
+  api.failNext('livestreams', 'x');
+  await assert.rejects(api.livestreams(801));
+  // A refusal the stand-in makes itself (a signed-out follow) is noted with its status.
+  api.loggedIn = false;
+  await assert.rejects(api.follow('pixelpear'), (err) => err.status === 401);
+  const tidy = notes.map(({ ms, body, ...n }) => ({ ...n, body: body === undefined ? undefined : JSON.parse(body) && 'kept' }));
+  assert.deepEqual(tidy, [
+    { url: 'https://web.kick.com/api/v1/drops/progress', method: 'GET', status: 200, body: undefined, error: undefined },
+    { url: 'https://kick.com/api/v2/channels/pixelpear/info', method: 'GET', status: 200, body: 'kept', error: undefined },
+    { url: 'https://web.kick.com/api/v1/drops/campaigns', method: 'GET', status: 503, body: 'kept', error: null },
+    { url: 'https://web.kick.com/api/v1/drops/campaigns', method: 'GET', status: 200, body: 'kept', error: undefined },
+    { url: 'https://kick.com/api/v1/user', method: 'GET', status: 0, body: undefined, error: 'TypeError: Failed to fetch' },
+    { url: 'https://web.kick.com/api/v1/livestreams?category_id=801', method: 'GET', status: 0, body: undefined, error: 'TypeError: Failed to fetch' },
+    { url: 'https://kick.com/api/v2/channels/pixelpear/follow', method: 'POST', status: 401, body: 'kept', error: null },
+  ]);
+  // A listener that fails doesn't break the call.
+  api.onRequest = () => {
+    throw new Error('listener broke');
+  };
+  assert.ok(await api.progress());
+});

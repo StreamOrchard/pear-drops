@@ -18,6 +18,26 @@ const { Updates, parseChangelog } = require('./updates');
 const { Connected } = require('./connected');
 const { DailyReward, CLAIM_MODES, kindOf } = require('./daily-reward');
 const { fileKeyStore } = require('@streamorchard/grapevine');
+const { DevLog, diagnostics, playerState, reportLines } = require('./devlog');
+
+// Settings › Developer (devlog.js): this side's warnings and errors, the app's pages' and Kick's
+// pages' go in its error log, kept for the next run too. Every request to Kick goes in Requests, and
+// every watch event from the player in Watch events.
+const devLog = new DevLog();
+let devErrors = null; // where the error log is kept for the next run (a db slot)
+let devSaveTimer = null;
+let devSentTimer = null;
+let devSavedFile = null; // the last diagnostics saved, for Show in folder
+const errText = (x) => (x instanceof Error ? String(x.stack || x.message).split('\n').slice(0, 3).join(' ') : typeof x === 'string' ? x : (() => { try { return JSON.stringify(x); } catch { return String(x); } })());
+for (const level of ['warn', 'error']) {
+  const was = console[level].bind(console);
+  console[level] = (...args) => {
+    was(...args);
+    try {
+      noteError('main', '', args.map(errText).join(' '));
+    } catch {}
+  };
+}
 
 // Errors are logged, never shown as Electron's own error dialog.
 process.on('uncaughtException', (err) => console.error('Uncaught exception:', err));
@@ -96,6 +116,8 @@ function appState() {
     dailyReward: auth.status === 'signed-in' ? (dailyReward?.snapshot() ?? null) : null,
     connected: connected?.state() ?? null,
     backups: backups?.status() ?? null,
+    // Settings › Developer: whether there's a hidden kick.com page to inspect (not in demo mode).
+    developer: { kickPage: !!api?.win },
   };
 }
 
@@ -104,6 +126,52 @@ function sendTo(win, channel, payload) {
   if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
   win.webContents.send(channel, payload);
 }
+
+/** An error for Settings › Developer: kept, saved soon, and the page told. */
+function noteError(src, where, msg) {
+  if (!devLog.error(src, where, msg)) return;
+  if (!devSaveTimer) devSaveTimer = setTimeout(saveDevErrors, 5000);
+  devChanged();
+}
+
+function saveDevErrors() {
+  clearTimeout(devSaveTimer);
+  devSaveTimer = null;
+  try {
+    devErrors?.save({ errors: devLog.toSave() });
+  } catch {}
+}
+
+/** Settings › Developer refetches its page when there's something new (at most a few times a second). */
+function devChanged() {
+  if (devSentTimer || quitting) return;
+  devSentTimer = setTimeout(() => {
+    devSentTimer = null;
+    sendTo(mainWindow, 'dev:changed');
+  }, 300);
+}
+
+/** A Kick page's failures, for Settings › Developer: the stream's page ('player') or the hidden API page and the login ('kick'). */
+function noteKickPage(contents) {
+  const src = () => (contents.getType() === 'webview' ? 'player' : 'kick');
+  const where = () => {
+    try {
+      const u = new URL(contents.getURL());
+      return u.hostname + u.pathname;
+    } catch {
+      return '';
+    }
+  };
+  contents.on('render-process-gone', (_e, d) => noteError(src(), where(), `The page stopped: ${d?.reason ?? 'unknown'}${d?.exitCode ? ` (exit ${d.exitCode})` : ''}`));
+  contents.on('unresponsive', () => noteError(src(), where(), 'The page stopped responding'));
+  // -3: a load replaced by another (a new stream), not a failure.
+  contents.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
+    if (isMainFrame && code !== -3) noteError(src(), String(url).split('?')[0], `Couldn’t load the page: ${description} (${code})`);
+  });
+}
+
+/** Settings › Developer › Developer tools: Inspect, and the answers' text in Requests. */
+const developerTools = () => store?.get().developerTools === true;
 
 function sendState() {
   if (quitting) return;
@@ -623,6 +691,8 @@ function registerIpc() {
   appIpc.handle('daily:opened', () => {
     if (auth.status === 'signed-in') dailyReward?.opened();
   });
+  // An error on the dashboard or the tray popover, for Settings › Developer.
+  appIpc.on('dev:log', (e, where, msg) => noteError('page', `${roleOf(e) === 'tray' ? 'tray' : 'dashboard'}${where ? ` ${String(where).slice(0, 200)}` : ''}`, String(msg ?? '').slice(0, 2000)));
   mainIpc.handle('auth:login', () => openLogin());
   mainIpc.handle('history:view', (_e, opts = {}) => {
     const campaignId = typeof opts.campaignId === 'string' ? opts.campaignId : null;
@@ -666,7 +736,7 @@ function registerIpc() {
     }
   });
   mainIpc.handle('settings:set', (_e, patch) => {
-    const allowed = ['stallMinutes', 'refreshSeconds', 'autoClaim', 'includeGameDrops', 'unmutePlayer', 'playerOpen', 'categoryOrder', 'disabledCategories', 'forgetOnQuit', 'alertOnStall', 'repeatAlert', 'alertRepeatSeconds', 'minimizeToTray', 'trayPercent', 'prioritizeExpiring', 'queueMode', 'campaignsMinutes', 'streamsMinutes', 'followedMinutes', 'playerMode', 'showChat', 'playerQuality', 'font', 'smartRarity', 'smartHopMinutes', 'notify', 'notifyAway', 'backupEvery', 'backupKeep', 'dailyClaim'];
+    const allowed = ['stallMinutes', 'refreshSeconds', 'autoClaim', 'includeGameDrops', 'unmutePlayer', 'playerOpen', 'categoryOrder', 'disabledCategories', 'forgetOnQuit', 'alertOnStall', 'repeatAlert', 'alertRepeatSeconds', 'minimizeToTray', 'trayPercent', 'prioritizeExpiring', 'queueMode', 'campaignsMinutes', 'streamsMinutes', 'followedMinutes', 'playerMode', 'showChat', 'playerQuality', 'font', 'smartRarity', 'smartHopMinutes', 'notify', 'notifyAway', 'backupEvery', 'backupKeep', 'dailyClaim', 'developerTools', 'developerToolsWarned'];
     const clean = Object.fromEntries(Object.entries(patch ?? {}).filter(([k]) => allowed.includes(k)));
     if (clean.stallMinutes !== undefined) clean.stallMinutes = Math.min(120, Math.max(5, Number(clean.stallMinutes) || 20));
     if (clean.refreshSeconds !== undefined) clean.refreshSeconds = Math.min(300, Math.max(30, Number(clean.refreshSeconds) || 60));
@@ -690,11 +760,14 @@ function registerIpc() {
     if (clean.notifyAway !== undefined) clean.notifyAway = clean.notifyAway === true;
     if (clean.queueMode !== undefined && !['manual', 'smart'].includes(clean.queueMode)) delete clean.queueMode;
     if (clean.dailyClaim !== undefined && !CLAIM_MODES.includes(clean.dailyClaim)) delete clean.dailyClaim;
+    for (const k of ['developerTools', 'developerToolsWarned']) if (clean[k] !== undefined) clean[k] = clean[k] === true;
+    if (clean.developerTools === developerTools()) delete clean.developerTools;
     if (clean.playerQuality === 'auto') clean.playerQuality = null;
     if (clean.playerQuality !== undefined && clean.playerQuality !== null) clean.playerQuality = Number(clean.playerQuality);
     if (clean.playerQuality !== undefined && clean.playerQuality !== null && ![160, 360, 480, 720, 1080].includes(clean.playerQuality)) delete clean.playerQuality;
     store.set(clean);
     if ('forgetOnQuit' in clean) security.setForget(clean.forgetOnQuit);
+    if ('developerTools' in clean) setDeveloperTools(clean.developerTools);
     if ('playerMode' in clean || 'showChat' in clean || 'playerQuality' in clean) watcher.applySettings();
     if ('backupKeep' in clean) backups.rotate();
     if ('backupEvery' in clean) backups.check();
@@ -737,7 +810,48 @@ function registerIpc() {
   mainIpc.handle('player:bounds', (_e, rect) => watcher.setBounds(rectArg(rect)));
   mainIpc.handle('player:spec', () => watcher.spec);
   mainIpc.handle('player:attached', (_e, role, gen, id) => watcher.attach(String(role), Number(gen), Number(id)));
-  mainIpc.handle('player:devtools', () => watcher.openDevTools());
+  // Settings › Developer: its lists a page at a time, the report, Copy player state, Inspect.
+  mainIpc.handle('dev:page', (_e, list, opts) => {
+    const o = opts && typeof opts === 'object' ? opts : {};
+    const page = devLog.page(['errors', 'requests', 'watch'].includes(list) ? list : 'errors', {
+      filter: o.filter === 'problems' ? 'problems' : 'all',
+      before: Number.isInteger(o.before) ? o.before : null,
+      limit: Math.min(50, Math.max(1, Number(o.limit) || 10)),
+    });
+    return { ...page, kickPage: !!api?.win, answers: developerTools() };
+  });
+  mainIpc.handle('dev:clear', () => {
+    devLog.clear();
+    saveDevErrors();
+    devChanged();
+    return true;
+  });
+  mainIpc.handle('dev:report', () => diagnosticsReport());
+  mainIpc.handle('dev:player-state', () => playerState({ farm: auth.status === 'signed-in' ? farmer.snapshot() : null, settings: store.get() }));
+  // Saved straight to Downloads (no system save dialog), then shown in its folder if asked.
+  mainIpc.handle('dev:save', () => {
+    const d = new Date();
+    const two = (n) => String(n).padStart(2, '0');
+    // Demo mode and tests: the data folder's own Downloads, never the real one.
+    const dir = DEMO ? path.join(app.getPath('userData'), 'Downloads') : app.getPath('downloads');
+    const file = path.join(dir, `pear-drops-diagnostics-${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}.txt`);
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(file, diagnosticsReport());
+      devSavedFile = file;
+      return { file, name: path.basename(file) };
+    } catch (err) {
+      console.warn('Couldn’t save diagnostics:', err.message);
+      return { error: true };
+    }
+  });
+  mainIpc.handle('dev:show-file', () => {
+    if (!devSavedFile || !fs.existsSync(devSavedFile)) return false;
+    if (DEMO) global.pdOpened.push(devSavedFile);
+    else shell.showItemInFolder(devSavedFile);
+    return true;
+  });
+  mainIpc.handle('dev:inspect', (_e, which) => inspect(String(which)));
   mainIpc.handle('open:external', (_e, url) => {
     if (typeof url !== 'string') return;
     if (/^https:\/\/(www\.)?kick\.com\//.test(url)) openLink(url);
@@ -766,6 +880,53 @@ function registerIpc() {
       return [];
     }
   });
+}
+
+/** Copy diagnostics: the app, the system and its state, then the three lists. Never the account's name. */
+function diagnosticsReport() {
+  const os = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' }[process.platform] || process.platform;
+  const signedIn = auth.status === 'signed-in';
+  return diagnostics({
+    app: { version: app.getVersion(), packaged: app.isPackaged, electron: process.versions.electron, chrome: process.versions.chrome },
+    sys: { os, release: process.getSystemVersion?.() ?? '', arch: process.arch, locale: app.getLocale() },
+    lines: reportLines({
+      farm: signedIn ? farmer.snapshot() : null,
+      settings: store.get(),
+      auth,
+      schema: db?.version,
+      backups: backups?.status(),
+      updates: updates?.status(),
+      connected: connected?.state(),
+      daily: signedIn ? dailyReward?.snapshot() : null,
+      developerTools: developerTools(),
+    }),
+    errors: devLog.list('errors'),
+    requests: devLog.list('requests'),
+    watch: devLog.list('watch'),
+  });
+}
+
+/**
+ * Inspect: Chrome's developer tools for the stream's page ('player') or the hidden kick.com page the
+ * API runs in ('kick'). Both can read the Kick login, so only with Developer tools on. Tests note it
+ * in global.pdInspected instead of opening a window.
+ */
+function inspect(which) {
+  if (!developerTools()) return false;
+  const wc = which === 'player' ? watcher?.view?.webContents : which === 'kick' ? api?.win?.webContents : null;
+  if (!wc || wc.isDestroyed()) return false;
+  if (HIDDEN) (global.pdInspected ??= []).push(which);
+  else wc.openDevTools({ mode: 'detach' });
+  return true;
+}
+
+/** Developer tools switched on or off: the answers' text kept or not, Inspect closed, and History told. */
+function setDeveloperTools(on) {
+  api.keepAnswers = on;
+  if (!on) devLog.forgetAnswers();
+  if (!on) for (const wc of [watcher?.view?.webContents, api?.win?.webContents]) if (wc && !wc.isDestroyed() && wc.isDevToolsOpened()) wc.closeDevTools();
+  history.add('developer-tools', { on, text: on ? 'Developer tools turned on: Inspect can read the Kick login' : 'Developer tools turned off' });
+  devChanged();
 }
 
 function setupUpdates() {
@@ -837,14 +998,22 @@ app.whenReady().then(async () => {
   app.on('web-contents-created', (_event, contents) => {
     if (contents.session === kickSession || HIDDEN) contents.setAudioMuted(true);
     guardContents(contents, { isApp });
+    if (contents.session === kickSession) noteKickPage(contents);
   });
 
   store = new Store();
   db = openDb(app.getPath('userData'), { log: (text) => console.warn(text) });
+  devErrors = db.slot('devErrors');
+  devLog.restore(devErrors.load().errors);
   // Once, from an older version's files.
   const imported = db.importFiles(app.getPath('userData'));
   security = await setupSecurity(() => store.get().forgetOnQuit, db.slot('security'), { closePages: closeKickPages });
   api = DEMO ? demo.api : new KickApi();
+  api.keepAnswers = developerTools();
+  api.onRequest = (r) => {
+    devLog.request(r);
+    devChanged();
+  };
   if (DEMO) demo.installStage(session.fromPartition(PARTITION), { eventSeconds: Number(env('PD_DEMO_EVENT_SECONDS')) || 120 });
   createMainWindow();
   watcher = new Watcher(() => mainWindow, () => store.get());
@@ -888,6 +1057,15 @@ app.whenReady().then(async () => {
   if (DEMO && env('PD_DEMO_SEED') && history.isEmpty()) demo.seedHistoryLog(history);
   createNotifier();
   farmer = new Farmer({ api, watcher, store, history, archive, cache: db.cache });
+  // Settings › Developer › Watch events: each one from the player, credited once progress goes up.
+  watcher.on('watch-event', ({ channelId }) => {
+    devLog.watch({ slug: watcher.slug, channelId });
+    devChanged();
+  });
+  farmer.on('credited', ({ slug }) => {
+    devLog.credited(slug);
+    devChanged();
+  });
   notifyFarming();
   farmer.seedFromHistory();
   farmer.loadCache();
@@ -993,6 +1171,7 @@ app.on('before-quit', () => {
 // Last, after farming has stopped: saves the run's numbers so a restart carries them on, and
 // closes the database.
 app.on('will-quit', () => {
+  saveDevErrors();
   farmer?.flushCache();
   archive?.flush();
   db?.close();

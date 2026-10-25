@@ -6294,3 +6294,221 @@ button.act-row:hover,
   width: 20px;
   height: 20px;
 }
+
+/* Settings › Developer (developer.js): the switch, the report, and the three lists, laid out as the
+   Activity view is: the list fills what's left and holds as many rows as fit. */
+.settings-pane .modal-section.pane-developer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 16px;
+}
+.settings-pane .modal-section.pane-developer > * {
+  flex-shrink: 0;
+}
+.pane-developer .setting {
+  padding: 10px 0;
+}
+.dev-buttons {
+  display: flex;
+  gap: 8px;
+}
+.dev-saved {
+  color: var(--text-2) !important;
+}
+.dev-saved.bad {
+  color: var(--red) !important;
+}
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--green);
+  font: inherit;
+  cursor: pointer;
+}
+.link-btn:hover {
+  text-decoration: underline;
+}
+/* Turning it on the first time: what Inspect can see. */
+.dev-warn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(251, 191, 75, 0.3);
+  border-radius: var(--r);
+  background: rgba(251, 191, 75, 0.07);
+}
+.dev-warn > .icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--amber);
+}
+.dev-warn div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dev-warn b {
+  font-size: 13px;
+}
+.dev-warn span {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.dev-n {
+  margin-left: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.dev-bar-end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tab-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: 600 12px var(--font);
+  cursor: pointer;
+}
+.tab-chip .icon {
+  width: 12px;
+  height: 12px;
+}
+.tab-chip:hover {
+  color: var(--text);
+}
+.tab-chip.active {
+  border-color: rgba(255, 93, 110, 0.4);
+  background: rgba(255, 93, 110, 0.08);
+  color: var(--text);
+}
+.act-list.dev-list {
+  /* Sized by the room left, never by its rows, so a page asked for before it was measured can't make it scroll. */
+  flex: 1 1 0 !important;
+  min-height: 100px;
+}
+.dev-row.dev-before {
+  opacity: 0.6;
+}
+.dev-where {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.dev-row.k-error .act-kind {
+  flex: none;
+}
+.act-row.dev-waiting .act-dir {
+  background: rgba(251, 191, 75, 0.12);
+  color: var(--amber);
+}
+.act-row.out .act-dir .icon,
+.act-row.dev-waiting .act-dir .icon {
+  width: 12px;
+  height: 12px;
+}
+.dev-status {
+  font-weight: 700;
+}
+.dev-status.ok {
+  color: var(--green);
+}
+.dev-status.bad {
+  color: var(--red);
+}
+.dev-detail {
+  padding-left: 108px;
+}
+.dev-full {
+  max-height: 96px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font: 11.5px/1.5 var(--mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.dev-full.dev-answer {
+  max-height: 120px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.dev-full.dev-quiet {
+  color: var(--muted);
+  font-family: var(--font);
+}
+.dev-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.dev-foot span {
+  flex: 1;
+}
+/* The stream header's ⋯ menu, while Developer tools are on. */
+.dev-more.active {
+  background: var(--surface-3);
+  color: var(--text);
+}
+#dev-menu-host {
+  position: fixed;
+  z-index: 60;
+}
+.dev-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r);
+  background: var(--solid-2);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.8);
+}
+.dev-menu-head {
+  padding: 6px 10px 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dev-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: 550 13px var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.dev-menu button:hover {
+  background: var(--surface-3);
+}
+.dev-menu .icon {
+  width: 15px;
+  height: 15px;
+  color: var(--text-2);
+}

@@ -28,6 +28,10 @@ const DEFAULTS = {
   smartHopMinutes: 30, // Smart: how much sooner another drop must run out before leaving a working stream
   minimizeToTray: true,
   trayPercent: true,
+  // Settings › Developer: Inspect and the answers' text in Requests (devlog.js), off to start with;
+  // and whether it was said, the first time, what Inspect can see.
+  developerTools: false,
+  developerToolsWarned: false,
   font: process.platform === 'linux' ? 'bundled' : 'system', // 'system': SF Pro, Segoe UI · 'bundled': Inter, the same everywhere
   // Settings › Notifications: a desktop notification switch per kind (src/main/notifier.js), all off to start with.
   // Settings › Connected apps: each app's Connect switch, off to start with (connected.js).

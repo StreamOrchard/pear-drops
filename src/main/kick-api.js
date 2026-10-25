@@ -23,6 +23,10 @@ class KickApi {
   constructor() {
     this.win = null;
     this.loading = null;
+    // Settings › Developer: told of every request ({ url, method, status, ms, body, error }), and
+    // whether to pass on the answer's text (only while Developer tools are on).
+    this.onRequest = null;
+    this.keepAnswers = false;
   }
 
   get session() {
@@ -57,7 +61,7 @@ class KickApi {
       url += (url.includes('?') ? '&' : '?') + params.toString();
     }
     // The login token is read inside the kick.com page and never leaves it.
-    const payload = { url, method, body: body === undefined ? null : JSON.stringify(body), auth };
+    const payload = { url, method, body: body === undefined ? null : JSON.stringify(body), auth, textMax: this.keepAnswers ? 20000 : 300 };
     const script = `(async (p) => {
       const cookie = (n) => { const m = document.cookie.match(new RegExp('(?:^|; )' + n + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : ''; };
       const headers = { Accept: 'application/json', 'x-app-platform': 'web' };
@@ -72,14 +76,27 @@ class KickApi {
         const text = await res.text();
         let json = null;
         try { json = JSON.parse(text); } catch {}
-        return { status: res.status, ok: res.ok, json, text: json ? null : text.slice(0, 300) };
+        return { status: res.status, ok: res.ok, json, text: json ? null : text.slice(0, p.textMax) };
       } catch (err) {
         return { status: 0, ok: false, json: null, text: String(err) };
       }
     })(${JSON.stringify(payload)})`;
+    const started = Date.now();
     const res = await this.win.webContents.executeJavaScript(script, true);
+    this.noteRequest({ url, method, status: res.status, ms: Date.now() - started, res });
     if (!res.ok) throw new ApiError(res.status, url, res.json ?? res.text);
     return res.json;
+  }
+
+  /** Tells Settings › Developer about a request: its answer's text only while Developer tools are on. */
+  noteRequest({ url, method, status, ms, res }) {
+    if (!this.onRequest) return;
+    const failed = status === 0 ? res.text : null;
+    let body;
+    if (this.keepAnswers && status !== 0) body = res.json !== null && res.json !== undefined ? JSON.stringify(res.json) : res.text;
+    try {
+      this.onRequest({ url, method, status, ms, body, error: failed });
+    } catch {}
   }
 
   // ---- Account ----

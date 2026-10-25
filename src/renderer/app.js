@@ -1,4 +1,4 @@
-/* global rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
+/* global developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
 
 let state = null;
 const ui = {
@@ -903,7 +903,7 @@ function renderPlayer() {
       ? cur
         ? `${img(cur.avatar, 'avatar')}<div class="who"><b>${esc(cur.username)} <span class="live-dot"></span></b><span>${esc(cur.categoryName)} · ${fmtCount(cur.viewers)} watching</span></div>
            ${followButton(cur)}
-           <button class="btn sm icon-only ghost" data-action="open-kick" data-slug="${esc(cur.slug)}" data-tip="Open on kick.com">${icon('external')}</button>${collapse}`
+           <button class="btn sm icon-only ghost" data-action="open-kick" data-slug="${esc(cur.slug)}" data-tip="Open on kick.com">${icon('external')}</button>${devMenuButton()}${collapse}`
         : `<div class="who"><b>Stream</b><span>Nothing playing</span></div>${collapse}`
       : `${collapse}<span class="rail-label">${cur ? esc(cur.username) : 'Stream'}</span>`,
   );
@@ -915,6 +915,7 @@ function renderPlayer() {
     $('#player-foot'),
     `${icon('volumeOff')}<span>Window muted</span><span class="spacer"></span><span>${cur ? `Kick's player · ${f.player?.eventsSent ?? 0} events` : ''}</span>`,
   );
+  placeDevMenu();
   syncPlayerBounds();
 }
 
@@ -941,7 +942,7 @@ function syncPlayerBounds() {
   // parked off-screen at a size of their own: hidden, or squashed to nothing, Kick's player could stop.
   // Under a pop-up (Settings, the daily reward's card), the stream takes no clicks: they're the
   // pop-up's, or close it, and a <webview> can take a click meant for what's over it.
-  const covered = !!ui.modal || ui.rewardOpen;
+  const covered = !!ui.modal || ui.rewardOpen || dev.menu;
   // When it last moved or was covered: the launch tests wait for Chromium to catch up before clicking.
   if (playerViews.classList.contains('parked') !== !rect || playerViews.classList.contains('covered') !== covered) playerViews.dataset.changedAt = String(performance.now());
   playerViews.classList.toggle('parked', !rect);
@@ -984,6 +985,7 @@ const SETTINGS_TABS = [
   ['account', 'users', 'Account'],
   ['apps', 'link', 'Connected apps'],
   ['updates', 'sparkle', 'Updates'],
+  ['developer', 'code', 'Developer'],
 ];
 
 /**
@@ -1287,6 +1289,7 @@ function renderModal() {
         <div class="spacer"></div><button class="btn danger" data-action="logout">${icon('logout')} Sign out</button></div>`,
     apps: ui.settingsTab === 'apps' ? connectedPane() : '',
     updates: ui.settingsTab === 'updates' ? updatesPane() : '',
+    developer: ui.settingsTab === 'developer' ? developerPane(row) : '',
   };
 
   const activityOpen = ui.settingsTab === 'apps' && !!act.app;
@@ -1306,6 +1309,7 @@ function renderModal() {
     </div>`,
   );
   if (activityOpen) fitActivity();
+  if (ui.settingsTab === 'developer') fitDeveloper();
 }
 
 function openModal(name) {
@@ -1318,6 +1322,7 @@ function closeModal() {
   if (ui.modal === 'whatsnew') window.pd.updates.seen();
   ui.modal = null;
   act.app = null;
+  dev.data = null; // Settings › Developer: fetched afresh when it opens again
   render();
 }
 
@@ -1471,6 +1476,7 @@ const actions = {
   ...historyActions,
   ...activityActions,
   ...updateActions,
+  ...developerActions,
   view: (el) => {
     ui.view = el.dataset.id;
     if (ui.view === 'history') loadHistory();
@@ -1513,6 +1519,7 @@ const actions = {
   'settings-tab': (el) => {
     ui.settingsTab = el.dataset.id;
     act.app = null; // Connected apps opens on its cards
+    Object.assign(dev, { list: 'errors', filter: 'all', before: null, pages: [], open: null, data: null, warn: false, saved: null });
     render();
   },
   'side-tab': (el) => {

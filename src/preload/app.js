@@ -58,6 +58,22 @@ contextBridge.exposeInMainWorld('pd', {
       return () => ipcRenderer.removeListener('connected:activity', listener);
     },
   },
+  // Settings › Developer: its lists, the report, Copy player state, Inspect, and the page's own errors.
+  developer: {
+    page: (list, opts) => ipcRenderer.invoke('dev:page', list, opts),
+    clear: () => ipcRenderer.invoke('dev:clear'),
+    report: () => ipcRenderer.invoke('dev:report'),
+    save: () => ipcRenderer.invoke('dev:save'),
+    showFile: () => ipcRenderer.invoke('dev:show-file'),
+    playerState: () => ipcRenderer.invoke('dev:player-state'),
+    inspect: (which) => ipcRenderer.invoke('dev:inspect', which),
+    log: (where, msg) => ipcRenderer.send('dev:log', String(where ?? '').slice(0, 200), String(msg ?? '').slice(0, 2000)),
+    onChanged: (callback) => {
+      const listener = () => callback();
+      ipcRenderer.on('dev:changed', listener);
+      return () => ipcRenderer.removeListener('dev:changed', listener);
+    },
+  },
   notifyTest: () => ipcRenderer.invoke('notify:test'),
   backups: {
     run: () => ipcRenderer.invoke('backups:run'),
@@ -78,7 +94,6 @@ contextBridge.exposeInMainWorld('pd', {
     return () => ipcRenderer.removeListener('player:spec', listener);
   },
   playerAttached: (role, gen, id) => ipcRenderer.invoke('player:attached', role, gen, id),
-  playerDevtools: () => ipcRenderer.invoke('player:devtools'),
   openExternal: (url) => ipcRenderer.invoke('open:external', url),
   updates: {
     status: () => ipcRenderer.invoke('update:status'),

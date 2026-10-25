@@ -116,3 +116,45 @@ test('the daily reward’s requests: Kick’s five gamification endpoints, and a
     ['/challenges/ch%201/claim', 'POST', undefined],
   ]);
 });
+
+test('each request tells Settings › Developer what was asked and what came back, the answer’s text only while Developer tools are on', async () => {
+  const api = new KickApi();
+  const answers = [
+    { status: 200, ok: true, json: { data: [1], session_token: 'abc' }, text: null },
+    { status: 503, ok: false, json: null, text: 'Service unavailable' },
+    { status: 0, ok: false, json: null, text: 'TypeError: Failed to fetch' },
+    { status: 200, ok: true, json: { data: [2] }, text: null },
+  ];
+  const scripts = [];
+  api.ensureWindow = async () => {};
+  api.win = { webContents: { executeJavaScript: async (script) => (scripts.push(script), answers.shift()) } };
+  const notes = [];
+  api.onRequest = (r) => notes.push(r);
+  api.keepAnswers = true;
+  assert.deepEqual(await api.request('https://web.kick.com/api/v1/drops/progress', { query: { a: 1 } }), { data: [1], session_token: 'abc' });
+  await assert.rejects(api.request('https://web.kick.com/api/v1/drops/claim', { method: 'POST', body: {} }), /HTTP 503/);
+  await assert.rejects(api.request('https://kick.com/api/v1/user'), /HTTP 0/);
+  api.keepAnswers = false;
+  await api.request('https://web.kick.com/api/v1/drops/campaigns');
+  assert.deepEqual(
+    notes.map(({ ms, ...n }) => (assert.ok(ms >= 0), n)),
+    [
+      { url: 'https://web.kick.com/api/v1/drops/progress?a=1', method: 'GET', status: 200, body: '{"data":[1],"session_token":"abc"}', error: null },
+      { url: 'https://web.kick.com/api/v1/drops/claim', method: 'POST', status: 503, body: 'Service unavailable', error: null },
+      { url: 'https://kick.com/api/v1/user', method: 'GET', status: 0, body: undefined, error: 'TypeError: Failed to fetch' },
+      { url: 'https://web.kick.com/api/v1/drops/campaigns', method: 'GET', status: 200, body: undefined, error: null },
+    ],
+  );
+  // The page gives back more of an answer that isn't JSON while it's on; the login never leaves it.
+  assert.match(scripts[0], /"textMax":20000/);
+  assert.match(scripts[3], /"textMax":300/);
+  // Nobody listening, or a listener that fails: the request still answers.
+  api.onRequest = () => {
+    throw new Error('listener broke');
+  };
+  answers.push({ status: 200, ok: true, json: { ok: 1 }, text: null });
+  assert.deepEqual(await api.request('https://kick.com/emotes'), { ok: 1 });
+  api.onRequest = null;
+  answers.push({ status: 200, ok: true, json: { ok: 2 }, text: null });
+  assert.deepEqual(await api.request('https://kick.com/emotes'), { ok: 2 });
+});

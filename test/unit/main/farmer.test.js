@@ -220,6 +220,16 @@ test('three uncredited watch events raise a conflict alert once', async () => {
   assert.equal(history.all().filter((e) => e.type === 'conflict').length, 1);
 });
 
+test('progress going up on the stream being watched says so (Settings › Developer marks its watch events credited)', async () => {
+  const { farmer, api } = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] }, units: { a: 10 } });
+  await farmer.tick();
+  const credited = [];
+  farmer.on('credited', (c) => credited.push(c));
+  api.units.a = 12;
+  await farmer.tick();
+  assert.deepEqual(credited, [{ slug: 's', delta: 2 }]);
+});
+
 test('ready rewards are claimed, and a finished category moves on to the next', async () => {
   const first = campaign('a', { category: { id: 1, name: 'First' }, endsIn: 1 });
   const second = campaign('b', { category: { id: 2, name: 'Second' }, endsIn: 5 });
