@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('pd', {
   tray: {
     showMain: () => ipcRenderer.invoke('tray:show-main'),
     quit: () => ipcRenderer.invoke('tray:quit'),
+    palette: () => ipcRenderer.invoke('tray:palette'),
     resize: (height) => ipcRenderer.invoke('tray:resize', height),
     action: (name) => ipcRenderer.invoke('tray:action', name),
   },
@@ -35,6 +36,17 @@ contextBridge.exposeInMainWorld('pd', {
     return () => ipcRenderer.removeListener('history:changed', listener);
   },
   login: () => ipcRenderer.invoke('auth:login'),
+  quit: () => ipcRenderer.invoke('app:quit'),
+  // The search box (Ctrl/⌘+K): opened from the docked stream or the tray, and its memory of what was run.
+  onPaletteOpen: (cb) => {
+    const listener = () => cb();
+    ipcRenderer.on('palette:open', listener);
+    return () => ipcRenderer.removeListener('palette:open', listener);
+  },
+  palette: {
+    get: () => ipcRenderer.invoke('palette:get'),
+    save: (m) => ipcRenderer.invoke('palette:save', m),
+  },
   logout: () => ipcRenderer.invoke('auth:logout'),
   pause: (paused) => ipcRenderer.invoke('farm:pause', paused),
   refresh: () => ipcRenderer.invoke('farm:refresh'),

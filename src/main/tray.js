@@ -419,7 +419,7 @@ class TrayController {
   /** ipc: where its page's messages are handled (main.js passes one that only answers the popover). */
   /** image, motion and mac: how pixels become an icon, whether the chest may hop, and whether
    *  quiet icons are templates (tests pass their own). */
-  constructor({ preload, onShowMain, onQuit, onAction, ipc = ipcMain, screen: display = screen, image = toImage, motion = () => !reducedMotion(), mac = process.platform === 'darwin' }) {
+  constructor({ preload, onShowMain, onPalette, onQuit, onAction, ipc = ipcMain, screen: display = screen, image = toImage, motion = () => !reducedMotion(), mac = process.platform === 'darwin' }) {
     this.preload = preload;
     this.screen = display;
     this.image = image;
@@ -428,6 +428,7 @@ class TrayController {
     this.icons = {};
     this.hop = null;
     this.onShowMain = onShowMain;
+    this.onPalette = onPalette;
     this.onQuit = onQuit;
     this.tray = null;
     this.popover = null;
@@ -438,6 +439,11 @@ class TrayController {
     ipc.handle('tray:show-main', () => {
       this.hidePopover();
       this.onShowMain();
+    });
+    // Ctrl/⌘+K in the popover: the main window, with its search box open.
+    ipc.handle('tray:palette', () => {
+      this.hidePopover();
+      this.onPalette?.();
     });
     ipc.handle('tray:quit', () => this.onQuit());
     ipc.handle('tray:resize', (_e, height) => Number.isFinite(height) && this.resize(height));

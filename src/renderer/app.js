@@ -1,4 +1,4 @@
-/* global developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
+/* global palette, initPalette, initPaletteItems, developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
 
 let state = null;
 const ui = {
@@ -153,7 +153,7 @@ function renderTitlebar() {
     : '';
   setHTML(
     $('#titlebar-actions'),
-    `${updateChip()}${rewardChest(dailyReward(), { open: ui.rewardOpen, tight: innerWidth < 1240 })}${refresh}
+    `${searchButton()}${updateChip()}${rewardChest(dailyReward(), { open: ui.rewardOpen, tight: innerWidth < 1240 })}${refresh}
     ${
       f?.paused
         ? `<button class="tb-btn resume" data-action="resume" data-tip="Start collecting again">${icon('play')}<span>Resume</span></button>`
@@ -165,6 +165,12 @@ function renderTitlebar() {
     <button class="tb-btn icon-only" data-action="settings" data-tip="Settings">${icon('settings')}</button>
     <button class="user-btn" data-action="settings" data-tip="Account and settings">${img(user?.avatar, 'avatar')}<span>${esc(user?.username ?? '')}</span></button>`,
   );
+}
+
+/** The search box's button (palette.js): its keys shown, so they're learned by seeing them. */
+function searchButton() {
+  const keys = palette.mod === '⌘' ? '⌘K' : 'Ctrl K';
+  return `<button class="tb-search ${innerWidth < 1240 ? 'tight' : ''}" data-action="palette" data-tip="Search ${keys}" aria-label="Search and actions">${icon('search')}<kbd>${keys}</kbd></button>`;
 }
 
 // ------------------------------------------------------------------ banner + hero
@@ -942,7 +948,7 @@ function syncPlayerBounds() {
   // parked off-screen at a size of their own: hidden, or squashed to nothing, Kick's player could stop.
   // Under a pop-up (Settings, the daily reward's card), the stream takes no clicks: they're the
   // pop-up's, or close it, and a <webview> can take a click meant for what's over it.
-  const covered = !!ui.modal || ui.rewardOpen || dev.menu;
+  const covered = !!ui.modal || ui.rewardOpen || dev.menu || palette.isOpen();
   // When it last moved or was covered: the launch tests wait for Chromium to catch up before clicking.
   if (playerViews.classList.contains('parked') !== !rect || playerViews.classList.contains('covered') !== covered) playerViews.dataset.changedAt = String(performance.now());
   playerViews.classList.toggle('parked', !rect);
@@ -974,6 +980,235 @@ const NOTIFY_TEST = {
   shown: 'Shown. Desktop notifications work.',
   unsupported: 'This computer doesn’t support desktop notifications.',
 };
+
+/**
+ * Settings' options, page by page: each page draws its rows from here (settingRows), and the search box
+ * (palette-items.js) lists them, so a new option is in both. type: 'switch', 'choice' (options [[value, label]]) or
+ * 'range' (min, max, step, unit). value(s): what it is now (by default the setting `id`). title and sub can be
+ * functions of { mac, tray }. when(s): shown only then, and why: what the box says while it isn't. action: a choice
+ * that runs its own action instead of setting `id` (Queue order). inRow: drawn inside that row, not as one of its own.
+ * extra(s): more controls before its own (the alarm's Test). words: other names the box finds it by.
+ */
+const SETTINGS_ROWS = [
+  {
+    page: 'farming',
+    id: 'queueMode',
+    title: 'Queue order',
+    sub: 'Smart watches whatever is running out of time first, catches drops that are rarely live while they’re on, and re-sorts as streams go offline and come back. Manual keeps your own drag order.',
+    type: 'choice',
+    options: [
+      ['smart', 'Smart'],
+      ['manual', 'Manual'],
+    ],
+    value: (s) => (s.queueMode === 'smart' ? 'smart' : 'manual'),
+    action: 'queue-mode',
+    words: ['sort', 'order', 'smart order', 'manual order'],
+  },
+  {
+    page: 'farming',
+    id: 'smartRarity',
+    title: 'Favour rarely live drops',
+    sub: 'How much Smart order moves up a drop whose category seldom has a stream on, so it’s watched while it’s live. Off sorts by end time alone.',
+    type: 'choice',
+    options: [
+      ['off', 'Off'],
+      ['some', 'Some'],
+      ['strong', 'Strong'],
+    ],
+    value: (s) => (['off', 'some', 'strong'].includes(s.smartRarity) ? s.smartRarity : 'strong'),
+    when: (s) => s.queueMode === 'smart',
+    why: 'Only in Smart order',
+    words: ['rare'],
+  },
+  {
+    page: 'farming',
+    id: 'smartHopMinutes',
+    title: 'Switch streams for',
+    sub: 'How much sooner another drop must run out of live time before Smart leaves a stream that’s earning.',
+    type: 'choice',
+    options: [
+      ['15', '15 min'],
+      ['30', '30 min'],
+      ['60', '1 h'],
+      ['120', '2 h'],
+    ],
+    value: (s) => String(s.smartHopMinutes ?? 30),
+    when: (s) => s.queueMode === 'smart',
+    why: 'Only in Smart order',
+  },
+  {
+    page: 'farming',
+    id: 'prioritizeExpiring',
+    title: 'Put drops about to expire first',
+    sub: 'In Manual order, a drop that would run out of time where it sits jumps to the top, as long as its next reward can still be earned.',
+    type: 'switch',
+  },
+  { page: 'farming', id: 'autoClaim', title: 'Claim drops automatically', sub: 'Claim each emote or badge the moment it unlocks.', type: 'switch' },
+  {
+    page: 'farming',
+    id: 'dailyClaim',
+    title: 'Claim Kick’s daily rewards',
+    sub: 'The daily crate and any event’s, like Trick or Treat. Before it resets claims each 15 minutes before midnight UTC if you haven’t, so no day is lost.',
+    type: 'choice',
+    options: [
+      ['self', 'Myself'],
+      ['before-reset', 'Before it resets'],
+      ['now', 'Right away'],
+    ],
+    value: (s) => (['self', 'now'].includes(s.dailyClaim) ? s.dailyClaim : 'before-reset'),
+    words: ['crate', 'chest'],
+  },
+  { page: 'farming', id: 'includeGameDrops', title: 'Include game drops', sub: 'Also farm rewards that need a linked game account.', type: 'switch' },
+  { page: 'recovery', id: 'stallMinutes', title: 'Recover a stalled stream after', sub: 'With no progress for this long, reload the stream, then switch to another.', type: 'range', min: 5, max: 60, step: 1, unit: 'min', words: ['stall', 'stuck'] },
+  {
+    page: 'recovery',
+    id: 'alertOnStall',
+    title: 'Alert when credit goes elsewhere',
+    sub: 'Kick credits one stream per account. Plays a sound when this one stops being credited because another is playing.',
+    type: 'switch',
+    extra: () => `<button class="btn sm" data-action="test-sound">${icon('bell')} Test</button>`,
+    words: ['alarm', 'sound', 'conflict'],
+  },
+  {
+    page: 'recovery',
+    id: 'repeatAlert',
+    title: 'Repeat the alarm',
+    sub: 'Keeps chiming until you press Stop alarm on the banner, or credit comes back.',
+    type: 'switch',
+    when: (s) => s.alertOnStall,
+    why: 'Only with the alert on',
+    extra: (s) => (s.repeatAlert ? settingControl(SETTINGS_ROWS.find((d) => d.id === 'alertRepeatSeconds'), s) : ''),
+  },
+  {
+    page: 'recovery',
+    id: 'alertRepeatSeconds',
+    title: 'Repeat the alarm every',
+    sub: 'How long between chimes.',
+    type: 'choice',
+    options: [
+      ['15', '15s'],
+      ['30', '30s'],
+      ['60', '1 min'],
+    ],
+    value: (s) => String(s.alertRepeatSeconds ?? 30),
+    when: (s) => s.alertOnStall && s.repeatAlert,
+    why: 'Only while the alarm repeats',
+    inRow: 'repeatAlert',
+  },
+  { page: 'notifications', id: 'notifyAway', title: 'Only when Pear Drops isn’t in front', sub: 'Skip them while you’re looking at the app.', type: 'switch' },
+  { page: 'refresh', id: 'refreshSeconds', title: 'Progress and claims', sub: 'Your drop progress, auto-claims, and whether the current stream is still live.', type: 'range', min: 30, max: 300, step: 15, unit: 's', words: ['refresh'] },
+  {
+    page: 'refresh',
+    id: 'streamsMinutes',
+    title: 'Live streams per category',
+    sub: 'Which channels are live for each drop. Categories with nothing live are checked every refresh.',
+    type: 'range',
+    min: 1,
+    max: 15,
+    step: 1,
+    unit: 'min',
+    words: ['refresh'],
+  },
+  { page: 'refresh', id: 'campaignsMinutes', title: 'Drop campaigns', sub: 'New and ended campaigns. The ↻ button in the title bar checks right away.', type: 'range', min: 2, max: 60, step: 1, unit: 'min', words: ['refresh'] },
+  { page: 'refresh', id: 'followedMinutes', title: 'Channels you follow', sub: 'Used to prefer streamers you follow.', type: 'range', min: 5, max: 60, step: 5, unit: 'min', words: ['refresh'] },
+  {
+    page: 'app',
+    id: 'playerMode',
+    title: 'Stream panel',
+    sub: 'Light shows Kick’s embed player with the popout chat, like Stream Multiview: much lighter on your computer. Full shows the whole channel page. Both earn drops the same way.',
+    type: 'choice',
+    options: [
+      ['light', 'Light'],
+      ['full', 'Full page'],
+    ],
+    value: (s) => (s.playerMode === 'full' ? 'full' : 'light'),
+    words: ['player'],
+  },
+  {
+    page: 'app',
+    id: 'showChat',
+    title: 'Show chat under the stream',
+    sub: 'Hide it to save a little more.',
+    type: 'switch',
+    value: (s) => s.showChat !== false,
+    when: (s) => s.playerMode !== 'full',
+    why: 'Only with the Light stream panel',
+  },
+  {
+    page: 'app',
+    id: 'playerQuality',
+    title: 'Stream quality',
+    sub: 'Drops credit the same at any quality; lower uses less CPU and data.',
+    type: 'choice',
+    options: [
+      ['160', '160p'],
+      ['360', '360p'],
+      ['720', '720p'],
+      ['auto', 'Auto'],
+    ],
+    value: (s) => String(s.playerQuality ?? 'auto'),
+    when: (s) => s.playerMode === 'full',
+    why: 'Only with the Full page stream panel',
+    words: ['resolution'],
+  },
+  {
+    page: 'app',
+    id: 'font',
+    title: 'Font',
+    sub: ({ mac }) => `System uses your computer’s own font${mac ? ' (SF Pro)' : navigator.platform.startsWith('Win') ? ' (Segoe UI)' : ''}. Inter comes with the app and looks the same on every computer.`,
+    type: 'choice',
+    options: [
+      ['system', 'System'],
+      ['bundled', 'Inter'],
+    ],
+    value: (s) => (s.font === 'bundled' ? 'bundled' : 'system'),
+  },
+  {
+    page: 'app',
+    id: 'minimizeToTray',
+    title: ({ tray }) => `Keep running in the ${tray}`,
+    sub: ({ tray }) => `Closing or minimizing the window keeps farming. Quit from the ${tray} icon.`,
+    type: 'switch',
+    words: ['tray', 'menu bar', 'minimize'],
+  },
+  { page: 'app', id: 'trayPercent', title: 'Show progress next to the icon', sub: ({ tray }) => `The current drop's percentage beside the ${tray} ring.`, type: 'switch', words: ['tray', 'menu bar', 'percent'] },
+  {
+    page: 'app',
+    id: 'unmutePlayer',
+    title: 'Keep the player unmuted',
+    sub: 'Sound is always muted at the window. Leaving the player itself unmuted keeps it playing normally in the background.',
+    type: 'switch',
+    words: ['mute', 'sound'],
+  },
+  { page: 'privacy', id: 'forgetOnQuit', title: 'Forget my login when I quit', sub: 'Signs you out of Kick every time the app closes.', type: 'switch', words: ['sign out', 'logout'] },
+];
+
+/** A row's value now (its setting by default). */
+const settingValue = (d, s) => (d.value ? d.value(s) : d.type === 'switch' ? !!s[d.id] : s[d.id]);
+/** A row's words: title and sub can depend on the system (the tray is the menu bar on a Mac). */
+const settingWords = (v, env) => (typeof v === 'function' ? v(env) : v);
+
+/** A row's own control, as Settings draws it. */
+function settingControl(d, s) {
+  const v = settingValue(d, s);
+  if (d.type === 'switch') return `<button class="switch ${v ? 'on' : ''}" data-action="setting-toggle" data-key="${d.id}"></button>`;
+  if (d.type === 'range')
+    return `<div class="range"><input type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${s[d.id]}" data-setting="${d.id}" data-unit="${d.unit}" /><output>${s[d.id]} ${d.unit}</output></div>`;
+  return `<div class="tabs">${d.options
+    .map(([o, label]) => `<button class="tab ${v === o ? 'active' : ''}" data-action="${d.action ?? 'setting-value'}"${d.action ? '' : ` data-key="${d.id}"`} data-id="${o}">${label}</button>`)
+    .join('')}</div>`;
+}
+
+/** The rows of a Settings page, the one the box opened it on lit for a moment. */
+function settingRows(page, s, env) {
+  const lit = ui.settingsRow && Date.now() - ui.settingsRow.at < 1600 ? ui.settingsRow.id : null;
+  return SETTINGS_ROWS.filter((d) => d.page === page && !d.inRow && (!d.when || d.when(s)))
+    .map(
+      (d) =>
+        `<div class="setting ${lit === d.id ? 'lit' : ''}" data-row="${d.id}"><div class="text"><b>${settingWords(d.title, env)}</b><span>${settingWords(d.sub, env)}</span></div>${d.extra ? d.extra(s) : ''}${settingControl(d, s)}</div>`,
+    )
+    .join('');
+}
 
 const SETTINGS_TABS = [
   ['farming', 'target', 'Farming'],
@@ -1227,25 +1462,13 @@ function renderModal() {
   const mac = navigator.platform.startsWith('Mac');
   const tray = mac ? 'menu bar' : 'tray';
   ui.settingsTab ??= 'farming';
-  const toggle = (key, on) => `<button class="switch ${on ? 'on' : ''}" data-action="setting-toggle" data-key="${key}"></button>`;
   const row = (title, sub, control) => `<div class="setting"><div class="text"><b>${title}</b><span>${sub}</span></div>${control}</div>`;
-  const range = (key, min, max, step, unit) =>
-    `<div class="range"><input type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" data-setting="${key}" data-unit="${unit}" /><output>${s[key]} ${unit}</output></div>`;
   const seg = (action, value, options) => `<div class="tabs">${options.map(([v, label]) => `<button class="tab ${value === v ? 'active' : ''}" data-action="${action}" data-id="${v}">${label}</button>`).join('')}</div>`;
+  const rows = (page) => settingRows(page, s, { mac, tray });
 
   const panes = {
-    farming: `
-      ${row('Queue order', 'Smart watches whatever is running out of time first, catches drops that are rarely live while they’re on, and re-sorts as streams go offline and come back. Manual keeps your own drag order.', seg('queue-mode', s.queueMode === 'smart' ? 'smart' : 'manual', [['smart', 'Smart'], ['manual', 'Manual']]))}
-      ${s.queueMode === 'smart' ? row('Favour rarely live drops', 'How much Smart order moves up a drop whose category seldom has a stream on, so it’s watched while it’s live. Off sorts by end time alone.', seg('setting-value', ['off', 'some', 'strong'].includes(s.smartRarity) ? s.smartRarity : 'strong', [['off', 'Off'], ['some', 'Some'], ['strong', 'Strong']]).replace(/data-action="setting-value"/g, 'data-action="setting-value" data-key="smartRarity"')) : ''}
-      ${s.queueMode === 'smart' ? row('Switch streams for', 'How much sooner another drop must run out of live time before Smart leaves a stream that’s earning.', seg('setting-value', String(s.smartHopMinutes ?? 30), [['15', '15 min'], ['30', '30 min'], ['60', '1 h'], ['120', '2 h']]).replace(/data-action="setting-value"/g, 'data-action="setting-value" data-key="smartHopMinutes"')) : ''}
-      ${row('Put drops about to expire first', 'In Manual order, a drop that would run out of time where it sits jumps to the top, as long as its next reward can still be earned.', toggle('prioritizeExpiring', s.prioritizeExpiring))}
-      ${row('Claim drops automatically', 'Claim each emote or badge the moment it unlocks.', toggle('autoClaim', s.autoClaim))}
-      ${row('Claim Kick’s daily rewards', 'The daily crate and any event’s, like Trick or Treat. Before it resets claims each 15 minutes before midnight UTC if you haven’t, so no day is lost.', seg('setting-value', ['self', 'now'].includes(s.dailyClaim) ? s.dailyClaim : 'before-reset', [['self', 'Myself'], ['before-reset', 'Before it resets'], ['now', 'Right away']]).replace(/data-action="setting-value"/g, 'data-action="setting-value" data-key="dailyClaim"'))}
-      ${row('Include game drops', 'Also farm rewards that need a linked game account.', toggle('includeGameDrops', s.includeGameDrops))}`,
-    recovery: `
-      ${row('Recover a stalled stream after', 'With no progress for this long, reload the stream, then switch to another.', range('stallMinutes', 5, 60, 1, 'min'))}
-      ${row('Alert when credit goes elsewhere', 'Kick credits one stream per account. Plays a sound when this one stops being credited because another is playing.', `<button class="btn sm" data-action="test-sound">${icon('bell')} Test</button>${toggle('alertOnStall', s.alertOnStall)}`)}
-      ${s.alertOnStall ? row('Repeat the alarm', 'Keeps chiming until you press Stop alarm on the banner, or credit comes back.', `${s.repeatAlert ? seg('setting-value', String(s.alertRepeatSeconds ?? 30), [['15', '15s'], ['30', '30s'], ['60', '1 min']]).replace(/data-action="setting-value"/g, 'data-action="setting-value" data-key="alertRepeatSeconds"') : ''}${toggle('repeatAlert', s.repeatAlert)}`) : ''}`,
+    farming: rows('farming'),
+    recovery: rows('recovery'),
     notifications: (() => {
       const where = mac ? 'System Settings › Notifications' : navigator.platform.startsWith('Win') ? 'Settings › System › Notifications' : 'your system’s notification settings';
       const result =
@@ -1262,26 +1485,14 @@ function renderModal() {
       return `<p class="pane-note">Your computer’s own notifications, also while Pear Drops is in the background or in the ${tray}.</p>
       ${row('Check they work', `<span class="notify-result ${ui.notifyTest ?? ''}">${result}</span>`, `<button class="btn sm" data-action="notify-test" ${ui.notifyTest === 'sending' ? 'disabled' : ''}>${icon('bell')} Send a test</button>${system}`)}
       <div class="notify-grid">${kinds}</div>
-      ${row('Only when Pear Drops isn’t in front', 'Skip them while you’re looking at the app.', toggle('notifyAway', s.notifyAway))}`;
+      ${rows('notifications')}`;
     })(),
-    refresh: `
-      <p class="pane-note">How often the app checks Kick. Shorter is more responsive; longer makes fewer requests.</p>
-      ${row('Progress and claims', 'Your drop progress, auto-claims, and whether the current stream is still live.', range('refreshSeconds', 30, 300, 15, 's'))}
-      ${row('Live streams per category', 'Which channels are live for each drop. Categories with nothing live are checked every refresh.', range('streamsMinutes', 1, 15, 1, 'min'))}
-      ${row('Drop campaigns', 'New and ended campaigns. The ↻ button in the title bar checks right away.', range('campaignsMinutes', 2, 60, 1, 'min'))}
-      ${row('Channels you follow', 'Used to prefer streamers you follow.', range('followedMinutes', 5, 60, 5, 'min'))}`,
-    app: `
-      ${row('Stream panel', 'Light shows Kick’s embed player with the popout chat, like Stream Multiview: much lighter on your computer. Full shows the whole channel page. Both earn drops the same way.', seg('setting-value', s.playerMode === 'full' ? 'full' : 'light', [['light', 'Light'], ['full', 'Full page']]).replace(/data-action="setting-value"/g, 'data-action="setting-value" data-key="playerMode"'))}
-      ${s.playerMode === 'full' ? '' : row('Show chat under the stream', 'Hide it to save a little more.', toggle('showChat', s.showChat !== false))}
-      ${s.playerMode === 'full' ? row('Stream quality', 'Drops credit the same at any quality; lower uses less CPU and data.', seg('setting-value', String(s.playerQuality ?? 'auto'), [['160', '160p'], ['360', '360p'], ['720', '720p'], ['auto', 'Auto']]).replace(/data-action="setting-value"/g, 'data-action="setting-value" data-key="playerQuality"')) : ''}
-      ${row('Font', `System uses your computer’s own font${mac ? ' (SF Pro)' : navigator.platform.startsWith('Win') ? ' (Segoe UI)' : ''}. Inter comes with the app and looks the same on every computer.`, seg('setting-value', s.font === 'bundled' ? 'bundled' : 'system', [['system', 'System'], ['bundled', 'Inter']]).replace(/data-action="setting-value"/g, 'data-action="setting-value" data-key="font"'))}
-      ${row(`Keep running in the ${tray}`, `Closing or minimizing the window keeps farming. Quit from the ${tray} icon.`, toggle('minimizeToTray', s.minimizeToTray))}
-      ${row('Show progress next to the icon', `The current drop's percentage beside the ${tray} ring.`, toggle('trayPercent', s.trayPercent))}
-      ${row('Keep the player unmuted', 'Sound is always muted at the window. Leaving the player itself unmuted keeps it playing normally in the background.', toggle('unmutePlayer', s.unmutePlayer))}`,
+    refresh: `<p class="pane-note">How often the app checks Kick. Shorter is more responsive; longer makes fewer requests.</p>${rows('refresh')}`,
+    app: rows('app'),
     privacy: `
       <div class="security-row ${enc === 'on' ? '' : 'off'}">${icon('lock')}
         ${enc === 'on' ? 'Your Kick login is encrypted with your system keychain.' : 'Login encryption is off. Start the app with npm start to turn it on.'}</div>
-      ${row('Forget my login when I quit', 'Signs you out of Kick every time the app closes.', toggle('forgetOnQuit', s.forgetOnQuit))}
+      ${rows('privacy')}
       ${backupRows(row, seg)}
       <p class="pane-note">Your settings, history and drop archive stay in the app’s data folder and never leave this computer.</p>`,
     account: `
@@ -1314,6 +1525,45 @@ function renderModal() {
 
 function openModal(name) {
   ui.modal = name;
+  render();
+}
+
+// ------------------------------------------------------------------ places, opened from outside them (the search box)
+
+/** Settings on page `tab`, with the row `row` lit and in view. */
+function openSettings(tab, { row = null } = {}) {
+  ui.settingsTab = tab;
+  act.app = null;
+  ui.settingsRow = row ? { id: row, at: Date.now() } : null;
+  if (ui.rewardOpen) openReward(false);
+  openModal('settings');
+  if (row) requestAnimationFrame(() => document.querySelector(`[data-row="${row}"]`)?.scrollIntoView({ block: 'nearest' }));
+}
+
+/** The dashboard's side card on tab `tab`: Done on a filter, Streams on a drop, the Queue with a drop's row open. */
+function openSide(tab, { filter = null, category = null } = {}) {
+  if (ui.modal) closeModal();
+  ui.view = 'dashboard';
+  ui.sideTab = tab;
+  if (filter) ui.pastFilter = filter;
+  if (category !== null) {
+    ui.selectedCategory = category;
+    if (tab === 'queue') ui.expanded.add(category);
+  }
+  render();
+  if (category !== null && tab === 'queue') requestAnimationFrame(() => document.querySelector(`#side .cat[data-cat-id="${CSS.escape(String(category))}"]`)?.scrollIntoView({ block: 'nearest' }));
+}
+
+/** History, on a range, a table, some event groups, a drop or some words. */
+function openHistory({ range, table, groups, campaign, text } = {}) {
+  if (ui.modal) closeModal();
+  if (range) hist.range = range;
+  if (table) hist.table = table;
+  if (groups) hist.groups = groups;
+  if (campaign !== undefined) hist.campaignId = campaign;
+  if (text !== undefined) hist.text = text;
+  ui.view = 'history';
+  loadHistory();
   render();
 }
 
@@ -1436,6 +1686,7 @@ function render({ tick = false } = {}) {
     renderModal();
     renderRewardPop();
     checkToasts();
+    palette.refresh();
     return;
   }
   renderBanner();
@@ -1447,6 +1698,7 @@ function render({ tick = false } = {}) {
   renderModal();
   renderRewardPop();
   checkToasts();
+  palette.refresh();
 }
 
 // ------------------------------------------------------------------ events
@@ -1494,6 +1746,7 @@ const actions = {
   reload: () => window.pd.reload(),
   settings: () => openModal('settings'),
   'close-modal': () => closeModal(),
+  palette: () => palette.toggle(),
   'test-sound': () => playAlert(),
   'stop-alarm': () => stopAlarm(),
   follow: async (el) => {
@@ -1800,6 +2053,10 @@ $('.layout').addEventListener('transitionend', () => syncPlayerBounds());
 
 setHTML($('#brand-mark'), brandMark(32));
 initUpdates();
+initPalette();
+initPaletteItems();
+// The box covers the docked stream while it's open, as Settings does.
+window.addEventListener('palette', () => syncPlayerBounds());
 window.pd.onState((next) => {
   state = next;
   render();
