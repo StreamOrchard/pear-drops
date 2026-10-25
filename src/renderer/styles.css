@@ -4581,6 +4581,178 @@ input[type='range']::-webkit-slider-thumb {
   color: var(--muted);
   font-size: 12.5px;
 }
+/* A page's main switch (Settings › Search box): a card above the rest. */
+.setting.lead {
+  margin: 8px 0 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.setting.lead:last-child {
+  border-bottom: 1px solid var(--border-2);
+}
+/* Settings › Search box: everything the box remembers, in a list that scrolls in its own box, so the page doesn't. */
+.settings-pane .modal-section.pane-search {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 18px;
+}
+.sb {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sb > * {
+  flex-shrink: 0;
+}
+.sb > .setting:not(.lead) {
+  border-bottom: 1px solid var(--border);
+}
+.sb.off > .setting:not(.lead),
+.sb.off > .sb-head,
+.sb.off > .sb-list,
+.sb.off > .sb-note {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.sb-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 10px;
+  min-height: 28px;
+}
+.sb-head b {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.sb-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.sb-head i {
+  flex: 1;
+}
+.sb-head .btn .icon {
+  width: 13px;
+  height: 13px;
+}
+.sb-head .sb-ask {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn.sb-clear {
+  color: var(--red);
+  border-color: rgba(255, 93, 110, 0.35);
+}
+.btn.sb-clear:hover {
+  background: rgba(255, 93, 110, 0.1);
+  border-color: rgba(255, 93, 110, 0.5);
+}
+.btn.sb-clear.sure {
+  background: rgba(255, 93, 110, 0.14);
+  border-color: rgba(255, 93, 110, 0.55);
+}
+.btn.sb-clear:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: transparent;
+}
+.sb-list {
+  flex: 0 1 auto;
+  min-height: 116px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.015);
+}
+.sb.quiet .sb-list {
+  opacity: 0.6;
+}
+.sb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 8px 6px 10px;
+  border-radius: 9px;
+  transition: background 0.12s;
+}
+.sb-row:hover {
+  background: var(--surface-2);
+}
+.sb-x {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.sb-row:hover .sb-x {
+  color: var(--red);
+  background: rgba(255, 93, 110, 0.1);
+  border-color: rgba(255, 93, 110, 0.32);
+}
+.sb-row .sb-x:hover {
+  background: rgba(255, 93, 110, 0.2);
+}
+.sb-x .icon {
+  width: 14px;
+  height: 14px;
+}
+.sb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 104px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.sb-empty .icon {
+  width: 20px;
+  height: 20px;
+  margin-bottom: 4px;
+}
+.sb-empty b {
+  color: var(--text-2);
+  font-size: 13px;
+}
+.sb-note {
+  margin-top: 12px;
+}
+.sb-note kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  margin: 0 1px;
+  border-radius: 5px;
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: 600 11px/1 var(--font);
+}
 .account-card {
   display: flex;
   align-items: center;

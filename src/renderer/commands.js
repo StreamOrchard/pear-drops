@@ -14,7 +14,8 @@
 // drawn), boost (added to its score), keep (in the empty box), fallback (only when nothing else is found), last (never
 // the first result: Quit), text (more words to find it by, as its second line counts).
 // What you run is remembered (palette memory, in the app's database): the empty box's Recent, and used items rank
-// higher (frecency). Nothing here touches the page.
+// higher (frecency). forget(id) and forgetAll() let it go; remembering(false) stops both, keeping what's remembered.
+// An item with noRecent (Clear recent itself) isn't remembered. Nothing here touches the page.
 
 /** Kinds of item, how a prefix picks them, and which come first when they score the same. */
 const CMD_SCOPES = {
@@ -35,6 +36,7 @@ const cmdProviders = new Map(); // name -> fn(q)
 const cmdSeen = new Map(); // id -> the last item a provider gave with that id (so Recent can find it again)
 let cmdMem = { recent: [], used: {} };
 let cmdSave = () => {};
+let cmdKeep = true; // remembering what's run (Settings › Search box › Recent)
 let cmdGroups = []; // the order groups are listed in with nothing typed (a prefix on its own): the rest after, A–Z
 
 const cmdOn = (it) => {
@@ -92,6 +94,8 @@ function findCommand(id) {
   if (it) return cmdOn(it) ? it : null;
   return allCommands('').find((x) => x.id === id) || (cmdSeen.has(id) && cmdOn(cmdSeen.get(id)) ? cmdSeen.get(id) : null);
 }
+/** An item by its id, to draw it, even while it can't run (Settings › Search box lists Recent). */
+const describeCommand = (id) => cmdItems.get(id) || allCommands('').find((x) => x.id === id) || cmdSeen.get(id) || null;
 
 // ---- what you ran: Recent, and how often (frecency)
 
@@ -104,7 +108,7 @@ function rememberCommands(m, save) {
   if (save) cmdSave = save;
 }
 function cmdRan(id, now = Date.now()) {
-  if (!id) return;
+  if (!id || !cmdKeep) return;
   const m = cmdMem;
   m.recent = [id, ...m.recent.filter((x) => x !== id)].slice(0, CMD_RECENT);
   const u = m.used[id] || { n: 0, t: 0 };
@@ -116,8 +120,26 @@ function cmdRan(id, now = Date.now()) {
   );
   cmdSave(m);
 }
+/** Lets one entry go: out of Recent, and how often it was run. */
+function cmdForget(id) {
+  if (!cmdMem.recent.includes(id) && !cmdMem.used[id]) return;
+  cmdMem.recent = cmdMem.recent.filter((x) => x !== id);
+  delete cmdMem.used[id];
+  cmdSave(cmdMem);
+}
+/** Lets everything go: Recent and how often each was run. */
+function cmdForgetAll() {
+  cmdMem = { recent: [], used: {} };
+  cmdSave(cmdMem);
+}
+/** On (the default): what's run is remembered and ranks higher. Off: neither, and what's remembered is kept. */
+function cmdRemembering(on) {
+  if (on !== undefined) cmdKeep = !!on;
+  return cmdKeep;
+}
 /** 12 × log2(1 + times run), halved for every 7 days since it was last run. */
 function cmdFrecency(id, now = Date.now()) {
+  if (!cmdKeep) return 0;
   const u = cmdMem.used[id];
   if (!u || !u.n) return 0;
   return 12 * Math.log2(1 + u.n) * Math.pow(0.5, Math.max(0, now - (+u.t || 0)) / (7 * CMD_DAY));
@@ -223,11 +245,11 @@ function runCommand(itemOrId, how = 'run', arg) {
   if (typeof how === 'number') {
     const b = (cmdVal(it.buttons) || [])[how];
     if (!b) return 'Not available here';
-    cmdRan(it.id);
+    if (!it.noRecent) cmdRan(it.id);
     b.run();
     return '';
   }
-  cmdRan(it.id);
+  if (!it.noRecent) cmdRan(it.id);
   if (how === 'alt' && it.alt) it.alt();
   else if (it.toggle) it.toggle.set(!it.toggle.get());
   else if (it.choice && arg !== undefined) it.choice.set(arg);
@@ -246,6 +268,10 @@ const commands = {
   remember: rememberCommands,
   ran: cmdRan,
   recent: cmdRecent,
+  forget: cmdForget,
+  forgetAll: cmdForgetAll,
+  remembering: cmdRemembering,
+  describe: describeCommand,
   frecency: cmdFrecency,
   search: searchCommands,
   fallbacks: cmdFallbacks,
