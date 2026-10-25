@@ -2,7 +2,11 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.24 (current)
+## 0.1.25 (current)
+- Settings › Developer: Copy diagnostics for a report, the app's errors, its requests to Kick and the player's watch events, and Developer tools with Inspect
+- Ctrl/⌘+K finds and does anything in the app: drops, channels, every button, tab and setting
+
+## 0.1.24
 - An event's prize fits its reveal, and the prizes it has given run in the order they were won
 - npm run worktree -- --clean removes worktrees whose pull request was squash-merged
 
