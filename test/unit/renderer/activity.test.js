@@ -112,6 +112,25 @@ test('the chart has a bar a minute, sent under received, and a mark for a proble
   assert.match(svg, /1 problem"/);
 });
 
+test('opening a row low on the page moves the page so it stays the last row, rather than a smaller page leaving it out', async () => {
+  const asked = [];
+  ctx.window.pd.connected.activity = async (app, opts) => (asked.push(JSON.parse(JSON.stringify(opts))), { entries: [], total: 0, newer: 0 });
+  // 300 px of list with a 100 px row open: room for 4 rows of 50.
+  const els = { '.act-list': { clientHeight: 300 }, '.act-detail': { offsetHeight: 100 } };
+  ctx.document.querySelector = (sel) => els[sel] ?? null;
+  const fit = async (open) => {
+    run('Object.assign(act, { app: "multiview", filter: "all", before: null, pages: [], limit: 6, open, loading: false, queued: false, data: { entries: [14, 13, 12, 11, 10, 9].map((n) => ({ n })) } })', { open, render: noop });
+    run('fitActivity()');
+    const at = JSON.parse(run('JSON.stringify({ before: act.before, pages: act.pages, limit: act.limit })'));
+    await new Promise((r) => setImmediate(r));
+    return at;
+  };
+  assert.deepEqual(await fit(9), { before: 13, pages: [null], limit: 4 }, 'the 6th row: the page starts two later, so it’s the 4th');
+  assert.deepEqual(asked.at(-1), { filter: 'all', before: 13, limit: 4 });
+  assert.deepEqual(await fit(12), { before: null, pages: [], limit: 4 }, 'the 3rd still fits: the page stays');
+  ctx.document.querySelector = () => null;
+});
+
 test('activity.js declares nothing another page script already has (one would quietly replace the other)', () => {
   const names = (file) => new Set([...fs.readFileSync(path.join(DIR, file), 'utf8').matchAll(/^(?:async\s+)?(?:function\s+|(?:const|let|var)\s+)([A-Za-z_$][\w$]*)/gm)].map((m) => m[1]));
   const mine = names('activity.js');

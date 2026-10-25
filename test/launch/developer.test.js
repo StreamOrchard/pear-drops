@@ -117,6 +117,42 @@ test('Settings › Developer fits the smallest window without scrolling, with a 
   assert.ok(content <= box + 1, `Settings › Developer needs ${content - box}px of scrolling`);
 });
 
+test('a row opened at the bottom of the page stays open there: the page moves on, rather than leaving it out', async () => {
+  await a.win.evaluate(() => document.querySelector('.dev-list .dev-row.open')?.click()); // the answer opened above
+  await until(a.win, () => !document.querySelector('.dev-list .act-detail') && document.querySelectorAll('.dev-list .dev-row').length >= 3, 'the newest page, nothing open');
+  const last = await a.win.$eval('.dev-list .dev-row:last-of-type', (el) => el.dataset.n);
+  await a.win.click(`.dev-list .dev-row[data-n="${last}"]`);
+  const shown = () => a.win.evaluate((n) => {
+    const rows = [...document.querySelectorAll('.dev-list .dev-row')];
+    const list = document.querySelector('.dev-list');
+    const detail = document.querySelector('.dev-list .act-detail');
+    return {
+      open: rows.at(-1)?.dataset.n === n && rows.at(-1).classList.contains('open') && rows.at(-1).nextElementSibling === detail,
+      fits: !!detail && detail.getBoundingClientRect().bottom <= list.getBoundingClientRect().bottom + 1,
+      rows: rows.length,
+      range: document.querySelector('.act-range')?.textContent,
+    };
+  }, last);
+  await until(a.win, (n) => document.querySelector('.dev-list .dev-row:last-of-type.open')?.dataset.n === n && document.querySelector('[data-action="dev-newest"]'), 'the row open, as the last on its page', 15000, last);
+  const first = await shown();
+  await until(a.win, () => true, 'settled', 800);
+  assert.deepEqual(await shown(), first, 'it holds still');
+  assert.ok(first.open && first.fits, JSON.stringify(first));
+  assert.doesNotMatch(first.range, /^1–/, 'a later page');
+  // Its words, line by line: one line each, Newest beside them.
+  const lines = await a.win.$eval('.act-bar', (bar) => [...bar.querySelectorAll('.tab-chip, .act-range')].map((el) => {
+    const words = [...el.childNodes].filter((c) => c.nodeType === 3 && c.textContent.trim());
+    return new Set(words.flatMap((w) => {
+      const r = document.createRange();
+      r.selectNodeContents(w);
+      return [...r.getClientRects()].map((rect) => Math.round(rect.top));
+    })).size;
+  }));
+  assert.deepEqual(lines, [1, 1], 'Errors only and the range stay on one line');
+  await a.win.click(`.dev-list .dev-row[data-n="${last}"]`);
+  await until(a.win, () => !document.querySelector('.dev-list .act-detail'), 'closed');
+});
+
 test('Copy diagnostics and Save to Downloads: the app, its state and the lists, never the login or the account', async () => {
   await a.win.click('[data-action="dev-copy-report"]');
   await until(a.win, () => /Copied/.test(document.querySelector('[data-action="dev-copy-report"]')?.textContent), 'copied');

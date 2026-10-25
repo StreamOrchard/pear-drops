@@ -1,4 +1,4 @@
-/* global render, icon, esc, widthOf, $, ui, state */
+/* global render, icon, esc, widthOf, $, ui, state, pageToOpenRow */
 // Settings › Connected apps › Activity: what went between Pear Drops and a linked app this run
 // (src/main/activity.js), newest first. A traffic chart for the last 30 minutes, the totals, and
 // the messages a page at a time, as many as fit, each in plain words; a click shows its fields.
@@ -180,6 +180,7 @@ function fitActivity() {
   const room = el.clientHeight - ($('.act-detail')?.offsetHeight ?? 0);
   const rows = Math.max(3, Math.floor(room / ACT_ROW_H));
   if (rows !== act.limit) {
+    pageToOpenRow(act, rows);
     act.limit = rows;
     loadActivity();
   }
