@@ -1,7 +1,8 @@
 // The search box (Ctrl/⌘+K) in the real app, against the stand-in Kick: opening and closing it, the empty box, a
 // drop named in full and its buttons, Tab's list, the prefixes, a switch, a choice and a slider set from it, Skip
-// stream, a tab by name, nothing found, what it remembers (in the database), the title bar's button, and Ctrl/⌘+K
-// from inside the docked stream and the tray popover.
+// stream, a tab by name, nothing found, what it remembers (in the database), the title bar's button, Ctrl/⌘+K
+// from inside the docked stream and the tray popover, and Settings › Search box: Recent's rows removed and cleared
+// (in the box and in Settings), Recent off, and the box off.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { launchApp, until, readDb } = require('./app');
@@ -228,5 +229,170 @@ test('Ctrl/⌘+K in the tray popover brings the main window forward, with the bo
   await pop.waitForLoadState('domcontentloaded');
   await pop.keyboard.press(`${MOD}+k`);
   await until(a.win, () => palette.isOpen(), 'open in the main window', 5000);
+  await closeBox();
+});
+
+// ---- Settings › Search box, and Recent in the box
+
+const savedRecent = () => readDb(a.data, (db) => db.get('palette', {})).recent ?? [];
+/** Waits for what's saved in the database to pass ok(recent). */
+async function saved(ok, what) {
+  for (let i = 0; i < 40; i++) {
+    if (ok(savedRecent())) return;
+    await a.win.waitForTimeout(100);
+  }
+  assert.fail(`Timed out waiting for ${what}: ${JSON.stringify(savedRecent())}`);
+}
+/** Runs a few things, so Recent has rows. */
+async function fillRecent() {
+  for (const q of ['history', 'done: missed', 'dashboard']) {
+    await openBox();
+    await typeIn(q);
+    await a.win.keyboard.press('Enter');
+    await a.win.waitForTimeout(120);
+  }
+  await closeBox();
+}
+/** The empty box, on its first Recent row. */
+async function onFirstRecent() {
+  await openBox();
+  const i = (await rows()).findIndex((r) => r.recent);
+  assert.ok(i >= 0, 'a Recent row');
+  for (let k = 0; k < i; k++) await a.win.keyboard.press('ArrowDown');
+  assert.match(await a.win.textContent('.pal-foot'), /remove from Recent/);
+  return (await rows())[i].id;
+}
+
+test('Recent: Del and Ctrl/⌘+⌫ remove the row it’s on, and its ×; plain ⌫ removes nothing', async () => {
+  await fillRecent();
+  let id = await onFirstRecent();
+  await a.win.keyboard.press('Backspace');
+  assert.ok((await rows()).some((r) => r.recent && r.id === id), 'plain ⌫ only edits the words');
+  await a.win.keyboard.press('Delete');
+  assert.ok(!(await rows()).some((r) => r.id === id && r.recent), 'Del removed it');
+  await saved((r) => !r.includes(id), 'it forgotten in the database');
+  id = (await rows()).find((r) => r.recent)?.id;
+  await a.win.keyboard.press(`${MOD}+Backspace`);
+  assert.ok(!(await rows()).some((r) => r.id === id && r.recent), 'Ctrl/⌘+⌫ removed the next');
+  id = (await rows()).find((r) => r.recent)?.id;
+  await a.win.hover(`.pal-row[data-id="${id}"]`);
+  await a.win.click(`.pal-row[data-id="${id}"] [data-pal-x]`);
+  assert.ok(!(await rows()).some((r) => r.id === id && r.recent), 'its × removed it');
+  assert.equal(await open(), true, 'the box stays open');
+  await closeBox();
+});
+
+test('Clear all asks first, in Recent’s heading: Esc keeps them, Enter clears them', async () => {
+  await fillRecent();
+  await openBox();
+  await a.win.click('[data-pal-clear]');
+  assert.match(await a.win.textContent('.pal-g .pal-ask'), /Forget all \d+\?/);
+  assert.match(await a.win.textContent('.pal-foot'), /clear all.*keep them/);
+  await a.win.keyboard.press('Escape');
+  assert.equal(await open(), true, 'Esc answers the question, the box stays');
+  assert.ok((await rows()).some((r) => r.recent), 'kept');
+  await a.win.click('[data-pal-clear]');
+  await a.win.keyboard.press('Enter');
+  assert.ok(!(await rows()).some((r) => r.recent), 'cleared');
+  await saved((r) => r.length === 0, 'Recent cleared in the database');
+  await closeBox();
+});
+
+test('Clear recent is a command: it asks in the box, and isn’t remembered itself', async () => {
+  await fillRecent();
+  await openBox();
+  await typeIn('clear recent');
+  assert.equal((await rows())[0].id, 'recent-clear');
+  await a.win.keyboard.press('Enter');
+  assert.equal(await open(), true);
+  assert.equal(await a.win.inputValue('#pal-q'), '', 'the empty box, with Recent');
+  assert.ok(await a.win.$('.pal-g .pal-ask'), 'asking');
+  await a.win.keyboard.press('Enter');
+  assert.ok(!(await rows()).some((r) => r.recent));
+  await saved((r) => r.length === 0, 'Recent cleared, without Clear recent in it');
+  await closeBox();
+});
+
+test('Settings › Search box lists Recent as the box draws it: × and Clear all (Keep, then Clear all), and Manage opens it', async () => {
+  await fillRecent();
+  await openBox();
+  await a.win.click('[data-pal-manage]');
+  await until(a.win, () => document.querySelector('.settings-tab.active[data-id="search"]'), 'Settings › Search box');
+  assert.equal(await open(), false);
+  const ids = await a.win.evaluate(() => [...commands.recent()]);
+  assert.deepEqual(await a.win.$$eval('.sb-row', (els) => els.map((e) => e.dataset.id)), ids);
+  await a.win.click(`.sb-row[data-id="${ids[0]}"] [data-action="recent-forget"]`);
+  await until(a.win, (x) => !document.querySelector(`.sb-row[data-id="${x}"]`), 'its row gone', 3000, ids[0]);
+  await saved((r) => !r.includes(ids[0]), 'it forgotten in the database');
+  await a.win.click('[data-action="recent-clear"]');
+  assert.match(await a.win.textContent('.sb-ask'), /Forget all \d+/);
+  await a.win.click('[data-action="recent-keep"]');
+  assert.equal(await a.win.$$eval('.sb-row', (els) => els.length), ids.length - 1, 'Keep keeps them');
+  await a.win.click('[data-action="recent-clear"]');
+  await a.win.click('[data-action="recent-clear-yes"]');
+  await until(a.win, () => document.querySelector('.sb-empty'), 'Nothing yet');
+  await saved((r) => r.length === 0, 'Recent cleared in the database');
+  assert.equal(await a.win.$eval('[data-action="recent-clear"]', (b) => b.disabled), true, 'nothing left to clear');
+  await a.win.keyboard.press('Escape');
+});
+
+test('Settings › Search box: a long Recent scrolls in its own box, so the page doesn’t', async () => {
+  await a.win.evaluate(() => commands.remember({ recent: commands.all('').slice(0, 20).map((x) => x.id), used: {} }));
+  await a.win.evaluate(() => openSettings('search'));
+  await until(a.win, () => document.querySelectorAll('.sb-row').length === 20, 'twenty rows');
+  const [page, box, list, inner] = await a.win.evaluate(() => {
+    const p = document.querySelector('.settings-pane');
+    const l = document.querySelector('.sb-list');
+    return [p.scrollHeight, p.clientHeight, l.scrollHeight, l.clientHeight];
+  });
+  assert.ok(page <= box + 1, `the page needs ${page - box}px of scrolling`);
+  assert.ok(list > inner, 'the list scrolls');
+  await a.win.evaluate(() => commands.forgetAll());
+  await a.win.keyboard.press('Escape');
+});
+
+test('Recent off: no Recent rows and nothing new remembered; on again, they come back', async () => {
+  await fillRecent();
+  const before = savedRecent();
+  await a.win.evaluate(() => openSettings('search'));
+  await a.win.click('[data-row="searchRecent"] .switch');
+  await until(a.win, () => state.settings.searchRecent === false, 'Recent off');
+  await a.win.keyboard.press('Escape');
+  await openBox();
+  assert.ok(!(await rows()).some((r) => r.recent), 'no Recent rows');
+  await typeIn('history');
+  await a.win.keyboard.press('Enter');
+  await a.win.waitForTimeout(200);
+  assert.deepEqual(savedRecent(), before, 'nothing new remembered');
+  await a.win.evaluate(() => window.pd.setSettings({ searchRecent: true }));
+  await until(a.win, () => state.settings.searchRecent === true, 'Recent on');
+  await openBox();
+  await typeIn('');
+  assert.ok((await rows()).some((r) => r.recent), 'they come back');
+  await closeBox();
+});
+
+test('the search box off: no Search button, and Ctrl/⌘+K (here or in the stream) says where to turn it on', async () => {
+  await a.win.evaluate(() => openSettings('search'));
+  await a.win.click('[data-row="searchBox"] .switch');
+  await until(a.win, () => state.settings.searchBox === false && !document.querySelector('.tb-search'), 'no Search button');
+  assert.ok(await a.win.$('.sb.off'), 'the rest of the page greys out');
+  await a.win.keyboard.press('Escape');
+  await a.win.keyboard.press(`${MOD}+k`);
+  await until(a.win, () => [...document.querySelectorAll('.toast')].some((t) => /search box is off/i.test(t.textContent)), 'the toast');
+  assert.equal(await open(), false);
+  await a.win.keyboard.press(`${MOD}+k`);
+  assert.equal(await a.win.$$eval('.toast', (els) => els.filter((t) => /search box is off/i.test(t.textContent)).length), 1, 'once, however often');
+  await a.app.evaluate(({ webContents }, mac) => {
+    webContents
+      .getAllWebContents()
+      .find((w) => w.getType() === 'webview')
+      ?.sendInputEvent({ type: 'keyDown', keyCode: 'K', modifiers: [mac ? 'meta' : 'control'] });
+  }, process.platform === 'darwin');
+  await a.win.waitForTimeout(400);
+  assert.equal(await open(), false, 'not from the stream either');
+  await a.win.evaluate(() => window.pd.setSettings({ searchBox: true }));
+  await until(a.win, () => document.querySelector('.tb-search'), 'the Search button back');
+  await openBox();
   await closeBox();
 });

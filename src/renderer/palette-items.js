@@ -702,13 +702,26 @@ function initPaletteItems() {
     // History, while it's showing
     { id: 'hist-clear', group: 'History', title: 'Clear History’s filters', sub: 'Every drop, event and word', icon: 'x', when: () => ui.view === 'history' && (!!hist.campaignId || hist.groups.length > 0 || !!hist.text), run: () => runAction('hist-clear') },
     { id: 'hist-clear-search', group: 'History', title: 'Clear History’s search', sub: () => `“${hist.text}”`, icon: 'x', when: () => ui.view === 'history' && !!hist.text, run: () => runAction('hist-clear-search') },
+    // The box itself: Clear recent asks in Recent's heading (Enter clears), and isn't remembered itself
+    {
+      id: 'recent-clear',
+      group: 'Search box',
+      title: 'Clear recent',
+      sub: () => `What the search box remembers: ${commands.recent().length} in Recent, and how often you use each`,
+      words: ['search history', 'clear all', 'forget'],
+      icon: 'trash',
+      when: () => commands.recent().length > 0,
+      noRecent: true,
+      stay: true,
+      run: () => palette.askClear(),
+    },
     // Your Kick account, and the app
     { id: 'login', group: 'Account', title: 'Sign in with Kick', sub: 'In the Kick window', icon: 'play', when: () => state?.auth?.status !== 'signed-in', run: () => runAction('login'), keep: true, keepGroup: 'Needs you' },
     { id: 'logout', group: 'Account', title: 'Sign out of Kick', sub: () => state.auth.user?.username ?? '', words: ['log out'], icon: 'logout', when: () => state?.auth?.status === 'signed-in', run: () => runAction('logout') },
     { id: 'quit', group: 'Account', title: 'Quit Pear Drops', sub: 'Stops farming', words: ['exit', 'close'], icon: 'power', last: true, run: () => window.pd.quit() },
   ]);
   // With only a prefix typed, what's used most comes first, and the account and Quit last.
-  commands.order(['Farming', 'Drops', 'Watching', 'Channels', 'Rewards', 'Stream panel', 'Daily reward', 'Places', 'Streams tab', 'Coming soon', 'Settings', 'Settings pages', 'Notifications', 'Updates', 'Your data', 'Connected apps', 'Developer', 'Activity', 'History', 'Done', 'Account']);
+  commands.order(['Farming', 'Drops', 'Watching', 'Channels', 'Rewards', 'Stream panel', 'Daily reward', 'Places', 'Streams tab', 'Coming soon', 'Settings', 'Settings pages', 'Notifications', 'Updates', 'Your data', 'Connected apps', 'Developer', 'Activity', 'History', 'Done', 'Search box', 'Account']);
   commands.provide('drops', () => {
     const fa = farm();
     if (!fa) return [];

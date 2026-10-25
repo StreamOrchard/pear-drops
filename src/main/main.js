@@ -747,7 +747,7 @@ function registerIpc() {
     }
   });
   mainIpc.handle('settings:set', (_e, patch) => {
-    const allowed = ['stallMinutes', 'refreshSeconds', 'autoClaim', 'includeGameDrops', 'unmutePlayer', 'playerOpen', 'categoryOrder', 'disabledCategories', 'forgetOnQuit', 'alertOnStall', 'repeatAlert', 'alertRepeatSeconds', 'minimizeToTray', 'trayPercent', 'prioritizeExpiring', 'queueMode', 'campaignsMinutes', 'streamsMinutes', 'followedMinutes', 'playerMode', 'showChat', 'playerQuality', 'font', 'smartRarity', 'smartHopMinutes', 'notify', 'notifyAway', 'backupEvery', 'backupKeep', 'dailyClaim', 'developerTools', 'developerToolsWarned'];
+    const allowed = ['stallMinutes', 'refreshSeconds', 'autoClaim', 'includeGameDrops', 'unmutePlayer', 'playerOpen', 'categoryOrder', 'disabledCategories', 'forgetOnQuit', 'alertOnStall', 'repeatAlert', 'alertRepeatSeconds', 'minimizeToTray', 'trayPercent', 'prioritizeExpiring', 'queueMode', 'campaignsMinutes', 'streamsMinutes', 'followedMinutes', 'playerMode', 'showChat', 'playerQuality', 'font', 'smartRarity', 'smartHopMinutes', 'notify', 'notifyAway', 'backupEvery', 'backupKeep', 'dailyClaim', 'developerTools', 'developerToolsWarned', 'searchBox', 'searchRecent'];
     const clean = Object.fromEntries(Object.entries(patch ?? {}).filter(([k]) => allowed.includes(k)));
     if (clean.stallMinutes !== undefined) clean.stallMinutes = Math.min(120, Math.max(5, Number(clean.stallMinutes) || 20));
     if (clean.refreshSeconds !== undefined) clean.refreshSeconds = Math.min(300, Math.max(30, Number(clean.refreshSeconds) || 60));

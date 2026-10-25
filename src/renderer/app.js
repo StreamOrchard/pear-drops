@@ -1,4 +1,4 @@
-/* global palette, initPalette, initPaletteItems, developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
+/* global commands, palette, initPalette, initPaletteItems, developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
 
 let state = null;
 const ui = {
@@ -169,6 +169,7 @@ function renderTitlebar() {
 
 /** The search box's button (palette.js): its keys shown, so they're learned by seeing them. */
 function searchButton() {
+  if (state.settings?.searchBox === false) return '';
   const keys = palette.mod === '⌘' ? '⌘K' : 'Ctrl K';
   return `<button class="tb-search ${innerWidth < 1240 ? 'tight' : ''}" data-action="palette" data-tip="Search ${keys}" aria-label="Search and actions">${icon('search')}<kbd>${keys}</kbd></button>`;
 }
@@ -987,7 +988,8 @@ const NOTIFY_TEST = {
  * 'range' (min, max, step, unit). value(s): what it is now (by default the setting `id`). title and sub can be
  * functions of { mac, tray }. when(s): shown only then, and why: what the box says while it isn't. action: a choice
  * that runs its own action instead of setting `id` (Queue order). inRow: drawn inside that row, not as one of its own.
- * extra(s): more controls before its own (the alarm's Test). words: other names the box finds it by.
+ * extra(s): more controls before its own (the alarm's Test). words: other names the box finds it by. lead: the page's
+ * main switch, drawn as a card above the rest.
  */
 const SETTINGS_ROWS = [
   {
@@ -1180,6 +1182,25 @@ const SETTINGS_ROWS = [
     type: 'switch',
     words: ['mute', 'sound'],
   },
+  {
+    page: 'search',
+    id: 'searchBox',
+    lead: true,
+    title: 'Search box',
+    sub: ({ mac }) => `Off: no Search button in the toolbar, and ${mac ? '⌘K' : 'Ctrl+K'} only tells you where to turn it back on.`,
+    type: 'switch',
+    value: (s) => s.searchBox !== false,
+    words: ['palette', 'command', 'ctrl k', 'cmd k'],
+  },
+  {
+    page: 'search',
+    id: 'searchRecent',
+    title: 'Recent',
+    sub: 'What you ran lately comes first when the box is empty, and what you use most ranks higher.',
+    type: 'switch',
+    value: (s) => s.searchRecent !== false,
+    words: ['remember', 'frecency'],
+  },
   { page: 'privacy', id: 'forgetOnQuit', title: 'Forget my login when I quit', sub: 'Signs you out of Kick every time the app closes.', type: 'switch', words: ['sign out', 'logout'] },
 ];
 
@@ -1205,7 +1226,7 @@ function settingRows(page, s, env) {
   return SETTINGS_ROWS.filter((d) => d.page === page && !d.inRow && (!d.when || d.when(s)))
     .map(
       (d) =>
-        `<div class="setting ${lit === d.id ? 'lit' : ''}" data-row="${d.id}"><div class="text"><b>${settingWords(d.title, env)}</b><span>${settingWords(d.sub, env)}</span></div>${d.extra ? d.extra(s) : ''}${settingControl(d, s)}</div>`,
+        `<div class="setting ${d.lead ? 'lead' : ''} ${lit === d.id ? 'lit' : ''}" data-row="${d.id}"><div class="text"><b>${settingWords(d.title, env)}</b><span>${settingWords(d.sub, env)}</span></div>${d.extra ? d.extra(s) : ''}${settingControl(d, s)}</div>`,
     )
     .join('');
 }
@@ -1216,6 +1237,7 @@ const SETTINGS_TABS = [
   ['notifications', 'bell', 'Notifications'],
   ['refresh', 'refresh', 'Refresh rates'],
   ['app', 'panel', 'App'],
+  ['search', 'search', 'Search box'],
   ['privacy', 'lock', 'Privacy & data'],
   ['account', 'users', 'Account'],
   ['apps', 'link', 'Connected apps'],
@@ -1489,6 +1511,7 @@ function renderModal() {
     })(),
     refresh: `<p class="pane-note">How often the app checks Kick. Shorter is more responsive; longer makes fewer requests.</p>${rows('refresh')}`,
     app: rows('app'),
+    search: ui.settingsTab === 'search' ? searchPane(s, rows) : '',
     privacy: `
       <div class="security-row ${enc === 'on' ? '' : 'off'}">${icon('lock')}
         ${enc === 'on' ? 'Your Kick login is encrypted with your system keychain.' : 'Login encryption is off. Start the app with npm start to turn it on.'}</div>
@@ -1523,6 +1546,36 @@ function renderModal() {
   if (ui.settingsTab === 'developer') fitDeveloper();
 }
 
+/**
+ * Settings › Search box: the box's switches, then everything it remembers (commands.js), drawn as in the box, each
+ * with its ×, and Clear all, which asks first in its place. Greyed while the box is off.
+ */
+function searchPane(s, rows) {
+  const ids = commands.recent();
+  const keys = palette.mod === '⌘' ? '⌘K' : 'Ctrl+K';
+  const del = palette.mod === '⌘' ? '<kbd>⌘</kbd><kbd>⌫</kbd> or <kbd>Del</kbd>' : '<kbd>Del</kbd>';
+  const list = ids
+    .map((id) => {
+      const it = commands.describe(id);
+      const title = it?.title ?? id;
+      const sub = palette.parts(commands.value(it?.sub));
+      return `<div class="sb-row" data-id="${esc(id)}">${palette.tile(it ?? { icon: 'clock' })}<span class="pal-txt"><span class="pal-t">${esc(title)}</span>${
+        sub ? `<span class="pal-sub">${sub}</span>` : ''
+      }</span><button class="sb-x" data-action="recent-forget" data-id="${esc(id)}" data-tip="Remove from Recent" aria-label="Remove ${esc(title)} from Recent">${icon('x')}</button></div>`;
+    })
+    .join('');
+  const clear = ui.recentAsk
+    ? `<span class="sb-ask">Forget all ${ids.length}, and how often you use each?</span><button class="btn sm" data-action="recent-keep">Keep</button><button class="btn sm sb-clear sure" data-action="recent-clear-yes">${icon('trash')} Clear all</button>`
+    : `<button class="btn sm sb-clear" data-action="recent-clear" ${ids.length ? '' : 'disabled'}>${icon('trash')} Clear all</button>`;
+  return `<div class="sb ${s.searchBox === false ? 'off' : ''} ${s.searchRecent === false ? 'quiet' : ''}">
+    <p class="pane-note">Find and do anything from the keyboard: drops, channels, actions and settings. Open it with <b>${keys}</b> or the toolbar’s <b>Search</b> button.</p>
+    ${rows('search')}
+    <div class="sb-head"><b>Recent</b><span>${ui.recentAsk ? '' : ids.length ? `${ids.length} remembered · the box shows up to 5` : 'nothing remembered'}</span><i></i>${clear}</div>
+    <div class="sb-list">${list || `<div class="sb-empty">${icon('clock')}<b>Nothing yet</b><span>What you run in the search box shows here.</span></div>`}</div>
+    <p class="pane-note sb-note">In the search box, ${del} removes the Recent row you’re on.</p>
+  </div>`;
+}
+
 function openModal(name) {
   ui.modal = name;
   render();
@@ -1533,6 +1586,7 @@ function openModal(name) {
 /** Settings on page `tab`, with the row `row` lit and in view. */
 function openSettings(tab, { row = null } = {}) {
   ui.settingsTab = tab;
+  ui.recentAsk = false;
   act.app = null;
   ui.settingsRow = row ? { id: row, at: Date.now() } : null;
   if (ui.rewardOpen) openReward(false);
@@ -1578,10 +1632,10 @@ function closeModal() {
 
 // ------------------------------------------------------------------ toasts + sound
 
-function toast({ title, body, kind = '', image }) {
+function toast({ title, body, kind = '', image, ic }) {
   const el = document.createElement('div');
   el.className = `toast ${kind}`;
-  el.innerHTML = `${image ? img(image) : `<span class="stat-icon ${kind === 'claim' ? 'gold' : 'green'}" style="width:36px;height:36px">${icon(kind === 'alert' ? 'alert' : 'gift')}</span>`}
+  el.innerHTML = `${image ? img(image) : `<span class="stat-icon ${kind === 'claim' ? 'gold' : 'green'}" style="width:36px;height:36px">${icon(ic ?? (kind === 'alert' ? 'alert' : 'gift'))}</span>`}
     <div><b>${esc(title)}</b><span>${esc(body)}</span></div>`;
   // Bottom right of the dashboard, clear of the docked stream (and of the charts on the left).
   const host = $('#toasts');
@@ -1666,6 +1720,8 @@ function checkToasts() {
 function render({ tick = false } = {}) {
   if (!state) return;
   applyFont(state.settings?.font);
+  commands.remembering(state.settings?.searchRecent !== false);
+  if (state.settings?.searchBox === false) palette.close(false);
   const signedIn = state.auth.status === 'signed-in';
   $('#welcome').hidden = signedIn;
   $('#app').hidden = !signedIn;
@@ -1771,6 +1827,7 @@ const actions = {
   },
   'settings-tab': (el) => {
     ui.settingsTab = el.dataset.id;
+    ui.recentAsk = false;
     act.app = null; // Connected apps opens on its cards
     Object.assign(dev, { list: 'errors', filter: 'all', before: null, pages: [], open: null, data: null, warn: false, saved: null });
     render();
@@ -1866,6 +1923,23 @@ const actions = {
   'open-connected-apps': () => {
     ui.settingsTab = 'apps';
     openModal('settings');
+  },
+  'recent-forget': (el) => {
+    commands.forget(el.dataset.id);
+    render();
+  },
+  'recent-clear': () => {
+    ui.recentAsk = true;
+    render();
+  },
+  'recent-keep': () => {
+    ui.recentAsk = false;
+    render();
+  },
+  'recent-clear-yes': () => {
+    commands.forgetAll();
+    ui.recentAsk = false;
+    render();
   },
   'setting-toggle': (el) => {
     const key = el.dataset.key;
@@ -2057,6 +2131,18 @@ initPalette();
 initPaletteItems();
 // The box covers the docked stream while it's open, as Settings does.
 window.addEventListener('palette', () => syncPlayerBounds());
+// Settings › Search box off: Ctrl/⌘+K (here, in the docked stream or the tray's popover) says where to turn it on.
+palette.lock(() => {
+  if (state?.settings?.searchBox !== false) return false;
+  // Once while it's showing (6 s), however often the keys are pressed.
+  if (Date.now() - (ui.searchOffAt ?? 0) >= 6000) {
+    ui.searchOffAt = Date.now();
+    toast({ title: 'The search box is off', body: 'Turn it on in Settings › Search box', ic: 'search' });
+  }
+  return true;
+});
+// A Recent row removed, or all of them, in the box: Settings › Search box keeps up.
+window.addEventListener('palette-recent', () => render());
 window.pd.onState((next) => {
   state = next;
   render();

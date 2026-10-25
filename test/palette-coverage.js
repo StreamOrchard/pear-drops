@@ -31,6 +31,7 @@ const INDIRECT = {
   'update-chip': 'Install the update, Restart to update and Settings › Updates',
   show: 'the tray popover’s Open Pear Drops: the box is in that window',
   quit: 'Quit Pear Drops (window.pd.quit, from the dashboard)',
+  'recent-clear': 'Clear recent (palette.askClear: the box asks in its Recent heading, as Settings asks in its place)',
 };
 
 /** Buttons left out on purpose, each with why. */
@@ -46,6 +47,9 @@ const LEFT_OUT = {
   'dev-menu': 'opens the stream’s ⋯ menu: each of its items is a command',
   'dev-warn-ok': 'Developer tools’ warning has to be read on its page first',
   'dev-warn-cancel': 'Developer tools’ warning has to be read on its page first',
+  'recent-forget': 'removes one entry: a row of a list, and Del does it in the box',
+  'recent-keep': 'answers Clear all’s question (Esc in the box)',
+  'recent-clear-yes': 'answers Clear all’s question (Enter in the box)',
 };
 
 /**

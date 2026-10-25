@@ -28,6 +28,9 @@ const DEFAULTS = {
   smartHopMinutes: 30, // Smart: how much sooner another drop must run out before leaving a working stream
   minimizeToTray: true,
   trayPercent: true,
+  // Settings › Search box: the box itself (Ctrl/⌘+K and the toolbar's button), and remembering what's run in it.
+  searchBox: true,
+  searchRecent: true,
   // Settings › Developer: Inspect and the answers' text in Requests (devlog.js), off to start with;
   // and whether it was said, the first time, what Inspect can see.
   developerTools: false,

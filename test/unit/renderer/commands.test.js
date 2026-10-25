@@ -193,6 +193,57 @@ test('frecency: more runs score more, and it halves for each 7 days since', () =
   assert.deepEqual([...commands.recent()], ['a', 'b'], 'only ids are kept');
 });
 
+test('forget lets one entry go (Recent and its count), forgetAll everything, each saved', () => {
+  const now = Date.now();
+  commands.remember({ recent: ['a', 'b', 'c'], used: { a: { n: 2, t: now }, b: { n: 1, t: now } } }, (m) => saved.push(JSON.parse(JSON.stringify(m))));
+  saved.length = 0;
+  commands.forget('b');
+  assert.deepEqual([...commands.recent()], ['a', 'c']);
+  assert.equal(commands.frecency('b', now), 0, 'and how often it was run');
+  assert.deepEqual(saved.at(-1), { recent: ['a', 'c'], used: { a: { n: 2, t: now } } });
+  commands.forget('nope');
+  assert.equal(saved.length, 1, 'nothing to forget: nothing saved');
+  commands.forgetAll();
+  assert.deepEqual(saved.at(-1), { recent: [], used: {} });
+  assert.equal(commands.recent().length, 0);
+});
+
+test('remembering(false): nothing new is remembered and nothing ranks higher; what was remembered comes back', () => {
+  const now = Date.now();
+  commands.remember({ recent: ['a'], used: { a: { n: 3, t: now } } });
+  const id = uid('r');
+  commands.add({ id, title: 'Remembered thing', run: () => {} });
+  assert.equal(commands.remembering(false), false);
+  commands.run(id);
+  assert.deepEqual([...commands.recent()], ['a']);
+  assert.equal(commands.frecency('a', now), 0);
+  assert.equal(commands.remembering(true), true);
+  assert.equal(commands.frecency('a', now), 12 * Math.log2(4));
+  assert.equal(commands.remembering(), true, 'asked without a value, says what it is');
+});
+
+test('an item with noRecent runs without being remembered, by Enter or a button', () => {
+  let ran = 0;
+  const id = uid('nr');
+  commands.add({ id, title: 'Clear the thing', noRecent: true, run: () => ran++, buttons: [{ label: 'Go', run: () => ran++ }] });
+  commands.run(id);
+  commands.run(id, 0);
+  assert.equal(ran, 2);
+  assert.ok(!commands.recent().includes(id));
+});
+
+test('describe finds an item to draw even while it can’t run, and a provider’s once it has given it', () => {
+  let on = false;
+  const id = uid('ds');
+  commands.add({ id, title: 'Sometimes here', when: () => on });
+  assert.equal(commands.find(id), null);
+  assert.equal(commands.describe(id).title, 'Sometimes here');
+  commands.provide(uid('p'), () => [{ id: 'given:1', title: 'Given once' }]);
+  commands.all();
+  assert.equal(commands.describe('given:1').title, 'Given once');
+  assert.equal(commands.describe('never:here'), null);
+});
+
 test('Quit is never the first result, and letters scattered elsewhere drop out when something matches well', () => {
   commands.add([
     { id: uid('q'), title: 'Quail pear drops', last: true },
