@@ -256,6 +256,9 @@ class Farmer extends EventEmitter {
       await this.refresh({ force });
       if (this.store.get().autoClaim) await this.claimReady();
       if (!this.paused) await this.decide();
+      // Kick answers again: a stream that carried on through the failed refresh is farming again
+      // (decide() only sets the status when it picks a stream).
+      if (this.status.code === 'error' && this.current) this.setStatus('farming', `Watching ${this.current.username}`);
       this.failedTicks = 0;
       this.checked(true);
     } catch (err) {

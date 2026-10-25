@@ -435,6 +435,18 @@ test('each refresh is a check: with nothing playing it goes on the live monitor,
   assert.ok(farmer.timeline.some((e) => e.type === 'switch'));
 });
 
+test('a refresh that fails while a stream plays on says so, and once Kick answers again it says it’s farming', async () => {
+  const { farmer, api, watcher } = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] } });
+  await farmer.tick();
+  api.progressError = new Error('offline');
+  await farmer.tick();
+  assert.equal(farmer.status.code, 'error');
+  assert.equal(watcher.watching, 's', 'the stream plays on');
+  api.progressError = null;
+  await farmer.tick();
+  assert.deepEqual(farmer.status, { code: 'farming', message: 'Watching s' });
+});
+
 test('a failed refresh retries soon, backing off up to the normal refresh, and resets once Kick answers', async () => {
   const { farmer, api } = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] } }, { refreshSeconds: 30 });
   const waits = [];
