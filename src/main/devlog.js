@@ -11,13 +11,13 @@ const TEXT_MAX = 600; // an error's text
 const BODY_MAX = 20_000; // a request's answer (Kick's whole page is cut off here)
 const SOURCES = ['main', 'page', 'kick', 'player'];
 
-// Logins, keys and cookies out of anything written down: address parts (?token=…), headers
+// Logins, keys and cookies out of anything written down: address parts and the like (token=…), headers
 // (Authorization: Bearer …, Cookie: …), Kick's cookies by name, and JSON fields ("token": "…").
 const SECRET = 'access_token|refresh_token|id_token|token|key|api_key|apikey|client_secret|secret|password|pass|auth|authorization|code|session|sessionid|sid|cookie|xsrf|csrf|session_token|xsrf-token|kick_session';
 // JSON fields: fewer, so Kick's error codes and messages stay readable.
 const SECRET_FIELDS = 'password|pass|secret|api_key|apikey|authorization|cookie|xsrf|csrf|session|sessionid|sid';
 const SECRET_RE = [
-  [new RegExp(`([?&#](?:${SECRET})=)[^&#\\s"']*`, 'gi'), '$1…'],
+  [new RegExp(`((?<![\\w-])(?:${SECRET})=)[^&#\\s"';]*`, 'gi'), '$1…'],
   [/\b(Bearer|Basic|OAuth)\s+[\w.~+/=%|-]{8,}/gi, '$1 …'],
   [/\b((?:set-)?cookie\s*[:=]\s*)[^\n]*/gi, '$1…'],
   [/\b(session_token|XSRF-TOKEN|kick_session)=[^;\s"']*/gi, '$1=…'],
@@ -226,16 +226,16 @@ function playerState({ farm, settings = {}, now = Date.now() } = {}) {
   if (!cur) return `Nothing playing · ${farm?.status?.message ?? 'not farming'}`;
   const ws = farm.player ?? {};
   const v = ws.video;
-  const mode = ws.mode === 'full' ? 'full page' : 'light';
+  const full = ws.mode === 'full';
   const watched = (farm.categories ?? []).flatMap((c) => c.campaigns ?? []).filter((c) => c.watching);
   const rows = [
-    ['address', `${mode === 'full' ? `https://kick.com/${cur.slug}` : `https://player.kick.com/${cur.slug}`} (${mode})`],
+    ['address', `${full ? `https://kick.com/${cur.slug}` : `https://player.kick.com/${cur.slug}`} (${full ? 'full page' : 'light'})`],
     ['loaded', ws.loadedAt ? `at ${clock(ws.loadedAt)}` : 'not yet'],
     ['playing', farm.health?.text ?? (farm.paused ? 'paused' : 'unknown')],
     ['video', v ? `${v.paused ? 'paused' : 'playing'} · ready state ${v.readyState} · at ${Math.round(v.currentTime ?? 0)} s · moved ${ago(ws.lastAdvanceAt, now)}` : 'no report from the page yet'],
     ['sound', `window muted · player ${settings.unmutePlayer ? 'unmuted' : 'muted'}`],
-    ['quality', mode === 'full' ? (settings.playerQuality ? `${settings.playerQuality}p` : 'auto') : 'Kick’s embed player'],
-    ['chat', mode === 'light' ? (settings.showChat === false ? 'hidden' : 'shown') : 'on the page'],
+    ['quality', full ? (settings.playerQuality ? `${settings.playerQuality}p` : 'auto') : 'Kick’s embed player'],
+    ['chat', full ? 'on the page' : settings.showChat === false ? 'hidden' : 'shown'],
     ['handshakes', String(ws.handshakes ?? 0)],
     ['watch events', `${ws.eventsSent ?? 0} on this stream · last ${ago(ws.lastEventAt, now)}`],
     ['credit', `last ${ago(farm.lastCreditAt, now)} · ${farm.eventsSinceCredit ?? 0} event${farm.eventsSinceCredit === 1 ? '' : 's'} since${farm.conflict ? ' · another session is taking it' : ''}`],
