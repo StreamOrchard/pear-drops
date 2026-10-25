@@ -1209,3 +1209,143 @@ test('a finished channel row records its drop, not a category', async () => {
   assert.ok(types.includes('campaign-complete'));
   assert.ok(!types.includes('category-complete'));
 });
+
+// ---- Why isn't this farming? (explain) -----------------------------------
+
+/** The step of each check and whether it passed: [[step, ok], …]. */
+const marks = (why) => why.checks.map((k) => [k.step, k.ok]);
+const failed = (why) => why.checks.find((k) => k.ok === false);
+
+/** Farming 'a' on 's', with the player playing and a watch event in. */
+async function farmingNow(extraApi = {}, storeOptions = {}) {
+  const s = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] }, units: { a: 10 }, ...extraApi }, storeOptions);
+  await s.farmer.tick();
+  Object.assign(s.watcher.status, { video: { paused: false, readyState: 4 }, lastEventAt: Date.now() });
+  return s;
+}
+
+test('explain: farming, every check passes, and it says why this stream was picked', async () => {
+  const { farmer } = await farmingNow({ followed: ['s'] });
+  const why = farmer.explain();
+  assert.deepEqual(marks(why), [['state', true], ['drop', true], ['reward', true], ['stream', true], ['pick', true], ['credit', true]]);
+  assert.equal(why.verdict.farming, true);
+  assert.equal(why.verdict.text, 'It’s farming Campaign a on s');
+  assert.deepEqual(why.drop, { id: 'a', name: 'Campaign a', category: 'Neon Rush' });
+  assert.match(why.checks[2].text, /Hype Emote needs 50 more min/);
+  assert.match(why.checks[4].text, /^Picked s: top of your queue, a channel you follow, 100 viewers$/);
+  assert.match(why.checks[5].text, /Watch events are arriving/);
+});
+
+test('explain: paused, or signed out, fails first', async () => {
+  const { farmer } = await farmingNow();
+  assert.equal(failed(farmer.explain({ signedIn: false })).text, 'Not signed in to Kick');
+  farmer.setPaused(true);
+  const why = farmer.explain();
+  assert.deepEqual(failed(why), { step: 'state', ok: false, text: 'Paused', note: 'Resume to keep collecting drops' });
+  assert.equal(why.verdict.text, 'Paused');
+  assert.equal(why.verdict.farming, false);
+  // Nothing is watched while paused: the stream and pick are what it would do.
+  assert.equal(why.checks.find((k) => k.step === 'credit').ok, null);
+  assert.equal(why.checks.find((k) => k.step === 'pick').ok, null);
+});
+
+test('explain: Kick not responding fails the first check', async () => {
+  const { farmer, api } = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] } });
+  api.progressError = new Error('offline');
+  await farmer.tick();
+  assert.match(failed(farmer.explain()).text, /^Could not reach Kick/);
+});
+
+test('explain: no drop with emotes or badges, with the game drops it leaves out', async () => {
+  const game = campaign('g', { org: 'Riot Games', connect: 'https://riot', rewards: [{ id: 'g1', name: 'Skin', required_units: 30 }] });
+  const { farmer } = setup({ campaigns: [game], streams: { 1: [live('s', 1)] } });
+  await farmer.tick();
+  const f = failed(farmer.explain());
+  assert.equal(f.step, 'drop');
+  assert.equal(f.text, 'No active drop with emotes or badges');
+  assert.equal(f.note, '1 game drop left out (Settings › Farming › Include game drops)');
+});
+
+test('explain: a drop whose queue row is switched off', async () => {
+  const { farmer, watcher } = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] } }, { disabledCategories: [1] });
+  await farmer.tick();
+  assert.equal(watcher.watching, null);
+  const f = failed(farmer.explain());
+  assert.deepEqual([f.step, f.text], ['drop', 'Neon Rush is switched off in your queue']);
+});
+
+test('explain: a reward waiting to be claimed, by hand or after Kick refused it', async () => {
+  const off = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] }, units: { a: 60 } }, { autoClaim: false });
+  await off.farmer.tick();
+  assert.deepEqual([failed(off.farmer.explain()).step, failed(off.farmer.explain()).text], ['reward', 'Hype Emote is waiting to be claimed']);
+
+  const refused = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] }, units: { a: 60 } });
+  refused.api.claim = async () => {
+    throw Object.assign(new Error('HTTP 400'), { status: 400, body: { data: { type: 'FAILED_TO_CLAIM' } } });
+  };
+  await refused.farmer.tick();
+  const f = failed(refused.farmer.explain());
+  assert.equal(f.text, 'Kick refused the claim for Hype Emote: Kick couldn’t claim it just now');
+  assert.equal(f.note, 'Trying again in 10m');
+
+  refused.api.claim = async (c, r) => refused.api.claimed.add(r);
+  refused.farmer.claimBackoff.clear();
+  await refused.farmer.tick();
+  assert.equal(failed(refused.farmer.explain()).text, 'Every reward in it is claimed');
+});
+
+test('explain: nothing live, or every live stream skipped for a while, and why', async () => {
+  const none = setup({ campaigns: [campaign('a')], streams: { 1: [] } });
+  await none.farmer.tick();
+  const f = failed(none.farmer.explain());
+  assert.deepEqual([f.step, f.text], ['stream', 'Nothing live in Neon Rush counts for it']);
+
+  const skipped = setup({ campaigns: [campaign('a')], streams: { 1: [live('s', 1)] } });
+  skipped.api.ineligible.add(1);
+  await skipped.farmer.tick();
+  const g = failed(skipped.farmer.explain());
+  assert.equal(g.text, '1 live, but each is skipped for a while');
+  assert.match(g.note, /^s: kick said it doesn’t count for the drop, for 20m more$/);
+
+  const channels = setup({ campaigns: [campaign('r', { channels: [{ id: 7, slug: 'seven' }] })], streams: { 1: [] } });
+  await channels.farmer.tick();
+  const h = failed(channels.farmer.explain());
+  assert.deepEqual([h.text, h.note], ['None of its channels are live in Neon Rush', 'seven']);
+});
+
+test('explain: another drop being watched instead, and why it goes first', async () => {
+  const other = campaign('b', { category: { id: 2, name: 'Pixel Pear' } });
+  const { farmer, watcher } = setup({ campaigns: [campaign('a'), other], streams: { 1: [live('s', 1)], 2: [live('p', 2)] } }, { categoryOrder: [1, 2] });
+  await farmer.tick();
+  assert.equal(watcher.watching, 's');
+  assert.equal(farmer.explain().drop.id, 'a', 'the drop being watched');
+  assert.deepEqual(farmer.explain().drops.map((d) => d.id), ['a', 'b'], 'the ones it can be asked about, in queue order');
+  // Asked about b: a's row is ahead of it in the queue.
+  const ahead = farmer.explain({ campaignId: 'b' });
+  assert.equal(ahead.drop.id, 'b');
+  assert.deepEqual([failed(ahead).step, failed(ahead).text], ['pick', 'Watching s for Neon Rush instead']);
+  assert.match(failed(ahead).note, /^Neon Rush is higher in your queue vs Pixel Pear \(\d+d \d+h left\)$/);
+  assert.equal(ahead.checks.find((k) => k.step === 'credit').ok, null, 'not watching it');
+  // b moved above it: it switches at the next check (Smart order waits for a big enough difference).
+  farmer.model.categories.reverse();
+  assert.equal(failed(farmer.explain({ campaignId: 'b' })).note, 'It switches at the next check');
+  farmer.store.set({ queueMode: 'smart' });
+  assert.equal(failed(farmer.explain({ campaignId: 'b' })).note, 'Smart order switches for at least 30 min less expected live time left');
+  farmer.current.manual = true;
+  assert.equal(failed(farmer.explain({ campaignId: 'b' })).note, 'You picked it');
+});
+
+test('explain: credit going elsewhere, a stall, and a player that isn\'t playing', async () => {
+  const { farmer, watcher } = await farmingNow();
+  watcher.status.video = { paused: true, readyState: 4 };
+  assert.deepEqual([failed(farmer.explain()).step, failed(farmer.explain()).text], ['credit', 'The video is paused']);
+
+  farmer.current.lastProgressAt = Date.now() - 25 * MIN;
+  assert.equal(failed(farmer.explain()).text, 'No credit for 25m');
+  assert.equal(failed(farmer.explain()).note, 'It reloads the player next');
+
+  for (let i = 0; i < 3; i++) watcher.emit('watch-event', { t: Date.now() });
+  const f = failed(farmer.explain());
+  assert.equal(f.text, '3 watch events with no credit: another Kick stream on your account is taking it');
+  assert.equal(farmer.explain().verdict.text, f.text);
+});
