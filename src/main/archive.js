@@ -58,6 +58,7 @@ class DropArchive extends EventEmitter {
     this.images = {}; // remote url -> file name in imageDir
     this.failed = new Map(); // remote url -> last failure time
     this.queue = [];
+    this.fetching = null; // the url downloading now: queuing it again would rewrite a file the pages may be reading
     this.pumping = null;
     this.saveTimer = null;
     this.saved = { campaigns: new Map(), images: new Map() }; // what the database has, as written
@@ -244,7 +245,7 @@ class DropArchive extends EventEmitter {
   }
 
   want(url) {
-    if (this.images[url] || this.queue.includes(url)) return;
+    if (this.images[url] || this.fetching === url || this.queue.includes(url)) return;
     const failedAt = this.failed.get(url);
     if (failedAt && Date.now() - failedAt < RETRY_MS) return;
     this.queue.push(url);
@@ -264,6 +265,7 @@ class DropArchive extends EventEmitter {
     let added = 0;
     while (this.queue.length) {
       const url = this.queue.shift();
+      this.fetching = url;
       try {
         const got = url.startsWith('data:') ? decodeData(url) : await this.fetchImage(url);
         const ext = EXT[String(got?.type ?? '').split(';')[0].trim().toLowerCase()];
@@ -276,6 +278,8 @@ class DropArchive extends EventEmitter {
         added += 1;
       } catch {
         this.failed.set(url, Date.now());
+      } finally {
+        this.fetching = null;
       }
     }
     if (added) {
