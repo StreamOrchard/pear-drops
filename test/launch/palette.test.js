@@ -55,7 +55,7 @@ test('the empty box: what’s farming now and its controls, with the prefixes in
   await closeBox();
 });
 
-test('a drop named in full comes first, drawn big, with its buttons: ← → move along them, Tab lists everything', async () => {
+test('a drop named in full comes first, drawn big, with its buttons: ← → and Tab / ⇧Tab move along them, More… lists everything', async () => {
   await openBox();
   await typeIn('neon rush launch week');
   const r = await rows();
@@ -63,15 +63,28 @@ test('a drop named in full comes first, drawn big, with its buttons: ← → mov
   assert.equal(await a.win.locator('.pal-hero .pal-track .mk').count(), 3, 'its reward track');
   const buttons = await a.win.$$eval('.pal-hero .pal-btn', (els) => els.map((b) => b.textContent.replace(/(↵|⌘\d|Ctrl\d|Tab)$/, '').trim()));
   assert.deepEqual(buttons, ['Show in queue', 'Skip stream', 'Switch it off', 'In History', 'More…']);
+  const on = () => a.win.textContent('.pal-hero .pal-btn.on');
   await a.win.keyboard.press('ArrowRight');
-  assert.match(await a.win.textContent('.pal-hero .pal-btn.on'), /Skip stream/);
+  assert.match(await on(), /Skip stream/);
   await a.win.keyboard.press('ArrowLeft');
   await a.win.keyboard.press('Tab');
-  await until(a.win, () => document.querySelector('.pal').classList.contains('pal-tabbed'), 'Tab’s list');
+  assert.match(await on(), /Skip stream/, 'Tab: the next button');
+  await a.win.keyboard.press('Shift+Tab');
+  assert.match(await on(), /Show in queue/, '⇧Tab: the one before');
+  await a.win.keyboard.press('Shift+Tab');
+  assert.match(await on(), /More…/, 'from the first, back round to the last');
+  await a.win.keyboard.press('Enter');
+  await until(a.win, () => document.querySelector('.pal').classList.contains('pal-tabbed'), 'everything for it');
   assert.match(await a.win.textContent('.pal-head'), /Neon Rush Launch Week/);
   const titles = (await rows()).map((x) => x.title);
   for (const t of ['Show in queue', 'Farm it first', 'Move up', 'Farm this drop', 'In History', 'Turbo Grin Emote']) assert.ok(titles.includes(t), t);
   assert.equal(await a.win.locator('.pal-list.split .pal-col').count(), 2, 'in two columns');
+  const column = () => a.win.evaluate(() => [...document.querySelectorAll('.pal-col')].findIndex((c) => c.querySelector('.pal-row.on')));
+  assert.equal(await column(), 0);
+  await a.win.keyboard.press('Tab');
+  assert.equal(await column(), 1, 'Tab: the right column');
+  await a.win.keyboard.press('Shift+Tab');
+  assert.equal(await column(), 0, '⇧Tab: back to the left');
   await a.win.keyboard.press('Escape');
   assert.equal(await a.win.evaluate(() => document.querySelector('.pal').classList.contains('pal-tabbed')), false, 'Esc: back to the results');
   assert.equal(await a.win.inputValue('#pal-q'), 'neon rush launch week');

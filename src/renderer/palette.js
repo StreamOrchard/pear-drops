@@ -3,9 +3,10 @@
 // It finds and runs anything palette-items.js registered with commands.add / commands.provide: drops, rewards,
 // channels, actions, every tab and filter, and Settings' options. A drop or channel named in full (or by the start of
 // its name, 3 letters or more) comes first, drawn big with its own row of buttons. As Stream Multiview's box:
-//   ↑ ↓ (Ctrl+N / P) move · ← → the big row's buttons, a choice's options, or Tab's other column · Enter runs ·
-//   ⇧Enter the second choice · Tab everything for the row, ⇧Tab back · Ctrl/⌘+1–9 the big row's 2nd to 10th buttons ·
-//   Esc steps back (Tab's list, the words, then the box).
+//   ↑ ↓ (Ctrl+N / P) move · ← → the big row's buttons, a choice's options, or the other column of a row's list ·
+//   Tab / ⇧Tab the big row's next / previous button, or the other column (More… and Enter: everything for it; Tab on
+//   a row with a list of its own opens it) · Enter runs · ⇧Enter the second choice · Ctrl/⌘+1–9 the big row's 2nd to
+//   10th buttons · Esc steps back (a row's list, the words, then the box).
 // Prefixes: > actions · @ channels · % drops · # Settings.
 // How a row is drawn comes from its item: icon or image (round for a channel), sub (text, or parts: 'text',
 // { b: 'bold', t: ' after' }), live and viewers, pills, chip, keys, toggle / choice / range, and on the big row heroSub,
@@ -203,7 +204,7 @@ function palRowHTML(r, i) {
   }
   const buttons = (commands.value(it.buttons) || [])
     .map((b, k) => {
-      const key = b.more ? palKbd('Tab') : k === 0 ? palKbd('↵') : k <= 9 ? palKbd(`${PAL_MOD}${k}`) : '';
+      const key = b.more ? '' : k === 0 ? palKbd('↵') : k <= 9 ? palKbd(`${PAL_MOD}${k}`) : '';
       return `<button type="button" tabindex="-1" class="pal-btn ${k === 0 ? 'first' : ''} ${b.on ? 'act' : ''} ${sel && k === pal.btn ? 'on' : ''}" data-pal-btn="${k}">${b.icon ? icon(b.icon) : ''}${esc(b.label)}${key}</button>`;
     })
     .join('');
@@ -213,7 +214,7 @@ function palRowHTML(r, i) {
 }
 /** Tab's list: what it's for, in the words box's place. */
 function palHeadHTML(it) {
-  return `<button type="button" class="pal-back" tabindex="-1" aria-label="Back" data-tip="Back (⇧Tab)">${icon('arrowLeft')}</button>${palTile(it, 'sm')}<b class="pal-ht">${esc(it.title)}</b>${it.live ? '<span class="pal-live">LIVE</span>' : ''}${(
+  return `<button type="button" class="pal-back" tabindex="-1" aria-label="Back" data-tip="Back (Esc)">${icon('arrowLeft')}</button>${palTile(it, 'sm')}<b class="pal-ht">${esc(it.title)}</b>${it.live ? '<span class="pal-live">LIVE</span>' : ''}${(
     commands.value(it.pills) || []
   )
     .map(palPill)
@@ -291,11 +292,13 @@ function palFoot() {
   const r = pal.rows[pal.sel];
   const it = r?.item;
   const k = (keys, what) => `<span class="pal-fk">${[].concat(keys).map(palKbd).join('')} ${esc(what)}</span>`;
-  const left = `<span class="pal-keyhelp">${k(['↑', '↓'], 'move')}${k('↵', 'run')}${k('Tab', 'more')}${k('Esc', 'close')}</span>`;
+  const left = `<span class="pal-keyhelp">${k(['↑', '↓'], 'move')}${k('↵', 'run')}${k('Esc', pal.stack.length ? 'back' : 'close')}</span>`;
   let right;
   if (pal.why) right = `<span class="pal-why">${esc(pal.why)}</span>`;
+  else if (pal.stack.length && palEl('.pal-list').classList.contains('split')) right = `<span class="pal-fks">${k(['Tab', '⇧Tab'], 'other column')}${k('Esc', 'back to results')}</span>`;
   else if (pal.stack.length) right = k('Esc', 'back to results');
-  else if (r?.hero && it.buttons) right = k(['←', '→'], 'pick an action');
+  else if (r?.hero && it.buttons) right = `<span class="pal-fks">${k(['←', '→'], 'or')}${k(['Tab', '⇧Tab'], 'pick an action')}</span>`;
+  else if (it?.more && !it.toggle && !it.choice && !it.range) right = k('Tab', 'everything for it');
   else if (it?.toggle) right = `<span class="pal-fks">${k('↵', 'flips a switch')}${it.alt ? k(['⇧', '↵'], 'opens its page') : ''}</span>`;
   else if (it?.choice) right = `<span class="pal-fks">${k(['←', '→'], 'pick')}${k('↵', 'sets it')}${it.alt ? k(['⇧', '↵'], 'opens its page') : ''}</span>`;
   else if (it?.range) right = `<span class="pal-fks">${r.arg !== undefined ? k('↵', `sets it to ${r.arg}`) : `<span class="pal-fk">type a number to set it</span>`}${k(['⇧', '↵'], 'opens its page')}</span>`;
@@ -415,8 +418,16 @@ function palKey(e) {
   } else if (across && palEl('.pal-list').classList.contains('split') && !pal.q.value) palAcross(dir);
   else if (k === 'Enter') palRun(pal.sel, e.shiftKey ? 'alt' : 'run');
   else if (k === 'Tab') {
-    if (e.shiftKey) palPop();
-    else if (r) palRun(pal.sel, 'more');
+    // Forward with Tab, back with ⇧Tab: the big row's buttons, or a row's list's two columns, else the rows.
+    const d = e.shiftKey ? -1 : 1;
+    if (r?.hero && r.item.buttons) {
+      const n = commands.value(r.item.buttons).length;
+      pal.btn = (pal.btn + d + n) % n;
+      pal.why = '';
+      palDraw();
+    } else if (palEl('.pal-list').classList.contains('split')) palAcross(d);
+    else if (d > 0 && r?.item.more && !pal.stack.length) palRun(pal.sel, 'more');
+    else palMove(d);
   } else if (mod && /^[1-9]$/.test(k)) {
     const n = Number(k);
     if (r?.hero && r.item.buttons) {
