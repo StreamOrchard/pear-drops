@@ -136,17 +136,22 @@ class History {
    * opts: { since, campaignId, groups: [..], text, limit, now }
    */
   view({ since = 0, campaignId = null, groups = null, text = '', limit = 400, now = Date.now() } = {}) {
-    const inRange = this.viewEvents(since).filter((e) => e.t <= now);
+    const all = this.viewEvents(since).filter((e) => e.t <= now);
+    const allSessions = this.sessions(all, now);
+    // Credit elsewhere is only lost while farming. Older versions recorded it while idle too, for
+    // watching on kick.com or elsewhere: those are left out.
+    const farming = (t) => allSessions.some((s) => s.start <= t && t <= (s.end ?? now));
+    const inRange = all.filter((e) => e.type !== 'credit-elsewhere' || farming(e.t));
     const forCampaign = (e) => !campaignId || e.campaignId === campaignId || (e.campaignIds ?? []).includes(campaignId);
     const scoped = inRange.filter(forCampaign);
-    const sessions = this.sessions(inRange, now).filter((s) => !campaignId || s.campaignIds.includes(campaignId));
+    const sessions = allSessions.filter((s) => !campaignId || s.campaignIds.includes(campaignId));
 
     return {
       totals: this.totals(scoped, sessions),
       daily: this.daily(scoped, sessions, since, now),
       activity: this.activity(scoped, sessions, since, now),
       hourly: this.hourly(sessions),
-      campaigns: this.campaigns(inRange, this.sessions(inRange, now)),
+      campaigns: this.campaigns(inRange, allSessions),
       channels: this.channels(sessions),
       sessions: sessions.slice(-200).reverse(),
       series: campaignId ? this.series(campaignId, inRange) : null,
