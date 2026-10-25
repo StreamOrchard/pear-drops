@@ -279,12 +279,12 @@ const DROP_TABLE = [
 ];
 
 /**
- * A made-up event's prize, square like Kick's (an event's prizes aren't collectible cards: Kick
- * sends only a thumbnail): the emote on a tile in its rarity's colour.
+ * A made-up event's prize, square and large like Kick's (an event's prizes aren't collectible
+ * cards: Kick sends only a thumbnail, a big one): the emote on a tile in its rarity's colour.
  */
 function prizeImage(glyph, hue, rarity) {
   const c = RARITY_COLOUR[rarity];
-  return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 120 120">
     <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},85%,58%)"/><stop offset="1" stop-color="hsl(${hue + 30},75%,32%)"/></linearGradient></defs>
     <rect x="4" y="4" width="112" height="112" rx="26" fill="url(#g)" stroke="${c}" stroke-width="4"/>
     <ellipse cx="44" cy="30" rx="26" ry="10" fill="#fff" opacity=".18"/>

@@ -240,13 +240,14 @@ test('an event’s crate filling: a tab of its own, in its colours; its page say
   assert.match(await a.win.textContent('.dr-pop .dr-won'), /Won this event\s*2\s*2 of 8 days/);
   const tiles = await a.win.$$eval('.dr-pop .dr-won-tile', (els) => els.map((e) => (e.classList.contains('open') ? '' : e.querySelector('small').textContent)));
   assert.equal(tiles.length, 8, 'a slot a day');
-  assert.equal(tiles[0], 'Yesterday');
+  assert.equal(tiles[1], 'Yesterday', 'in the order they were won: the oldest first');
+  assert.notEqual(tiles[0], '');
   assert.deepEqual(tiles.slice(2), ['', '', '', '', '', ''], 'the days still to come');
   const sizes = await a.win.$$eval('.dr-pop .dr-won-tile', (els) => els.map((e) => `${e.offsetWidth}x${e.offsetHeight}`));
   assert.equal(new Set(sizes).size, 1, `every slot the same square: ${sizes}`);
   assert.match(sizes[0], /^(\d+)x\1$/, 'square');
   assert.equal(await a.win.$eval('.dr-pop .dr-head', (e) => getComputedStyle(e).backgroundColor), 'rgba(0, 0, 0, 0)', 'no bar behind the tabs');
-  assert.match(await a.win.getAttribute('.dr-pop .dr-won-tile', 'data-tip'), /^[A-Z][\w ]+ · \w+ (emote|badge) · Yesterday$/);
+  assert.match(await a.win.getAttribute('.dr-pop .dr-won-tile:nth-child(2)', 'data-tip'), /^[A-Z][\w ]+ · \w+ (emote|badge) · Yesterday$/);
   assert.equal(await a.win.evaluate(() => document.querySelector('.dr-pop').scrollHeight - document.querySelector('.dr-pop').clientHeight), 0, 'the card still fits');
   await a.win.keyboard.press('Escape');
 });
@@ -294,6 +295,14 @@ test('claiming an event’s crate: its prize, named from Kick’s rewards list, 
   assert.match(await a.win.textContent('.dr-winner-title'), /Trick or Treat/);
   assert.match(await a.win.textContent('.dr-winner-caption'), /Full Moon\s*Rare badge\s*New/);
   assert.equal(await a.win.getAttribute('.dr-winner .dr-won-card', 'alt'), 'Full Moon');
+  // Kick's prize pictures are big: the reveal sizes it, not the picture.
+  const fit = await a.win.evaluate(() => {
+    const p = document.querySelector('.dr-winner .dr-won-card');
+    const r = p.getBoundingClientRect();
+    const box = document.querySelector('.dr-won-wrap').getBoundingClientRect();
+    return { natural: p.naturalWidth, inside: r.width <= box.width + 0.5 && r.height <= box.height + 0.5, square: Math.round(r.width) === Math.round(r.height) };
+  });
+  assert.deepEqual(fit, { natural: 1024, inside: true, square: true }, 'the prize fits its place in the reveal');
   await a.win.waitForTimeout(3000);
   assert.equal(await a.win.evaluate(() => document.querySelector('.dr-reveal')?.dataset.phase), 'celebrate', 'still showing the prize');
   await a.win.click('.dr-reveal .dr-done');
