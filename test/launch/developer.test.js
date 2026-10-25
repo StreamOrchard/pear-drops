@@ -1,6 +1,7 @@
 // Settings › Developer: the Developer tools switch and its warning, the error log (kept for the next
 // run), Kick's requests and the player's watch events, Copy diagnostics, Save to Downloads, Copy
-// player state and Inspect, in the real app against the stand-in Kick, at its smallest window.
+// player state, Why isn't this farming? and Inspect, in the real app against the stand-in Kick, at
+// its smallest window.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -140,6 +141,50 @@ test('Copy diagnostics and Save to Downloads: the app, its state and the lists, 
   assert.deepEqual(await a.app.evaluate(() => global.pdOpened), [path.join(dir, file)], 'Show in folder, in the data folder’s own Downloads');
 });
 
+test('Why isn’t this farming?: from the ⋯ and the status, each check in order, ‹ › through the drops, Copy, and it fits', async () => {
+  await a.win.keyboard.press('Escape');
+  const dialog = () => a.win.evaluate(() => document.querySelector('.modal.why')?.textContent ?? '');
+  // The Requests test made a refresh fail on purpose: one that works, so Kick is answering again.
+  await a.demo((d) => d.farmer.tick({ force: true }));
+  await until(a.win, () => document.querySelector('[data-action="dev-menu"]'), 'the ⋯ on the stream');
+  await a.win.click('[data-action="dev-menu"]');
+  await a.win.click('.dev-menu [data-action="dev-why"]');
+  await until(a.win, () => document.querySelectorAll('.modal.why .why-row').length === 6, 'the six checks');
+  assert.equal(await a.win.locator('.dev-menu').count(), 0, 'the menu closes');
+  const farming = await dialog();
+  assert.match(farming, /watching Arcadia/);
+  assert.match(farming, /Running and signed in/);
+  assert.match(farming, /Picked Arcadia: /);
+  assert.match(farming, /Farming: It’s farming .* on Arcadia/);
+  // It fits, at the smallest window.
+  assert.ok(await a.win.evaluate(() => {
+    const m = document.querySelector('.modal.why');
+    return m.scrollHeight <= m.clientHeight + 1;
+  }), 'no scrolling');
+  await a.win.click('[data-action="dev-why-copy"]');
+  await until(a.win, () => /Copied/.test(document.querySelector('.modal.why .modal-foot')?.textContent), 'copied');
+  const text = await clipboard();
+  assert.match(text, /^Why isn't this farming\? · /);
+  assert.match(text, /^✓ Running and signed in/m);
+  assert.match(text, /^Farming: It’s farming /m);
+  // › the next drop in the queue: another drop is being watched instead.
+  await a.win.click('[data-action="dev-why-step"][data-dir="1"]');
+  await until(a.win, () => /^2 of /.test(document.querySelector('.why-count')?.textContent), 'the next drop');
+  await until(a.win, () => /Not farming:/.test(document.querySelector('.why-verdict')?.textContent), 'its verdict');
+  await a.win.keyboard.press('Escape');
+  await until(a.win, () => !document.querySelector('.modal.why'), 'closed with Esc');
+  // Paused: from the status in the title bar, it says so first.
+  await a.win.evaluate(() => window.pd.pause(true));
+  await until(a.win, () => /Paused/.test(document.querySelector('#status-pill')?.textContent), 'paused');
+  await a.win.click('#status-pill button[data-action="dev-why"]');
+  await until(a.win, () => /Not farming: Paused/.test(document.querySelector('.why-verdict')?.textContent), 'Paused, first');
+  assert.equal(await a.win.locator('.why-row.why-x').count(), 1, 'the one that failed');
+  await a.win.keyboard.press('Escape');
+  await a.win.evaluate(() => window.pd.pause(false));
+  await until(a.win, () => document.querySelector('[data-action="dev-menu"]'), 'farming again', 30000);
+  assert.deepEqual(a.errors, []);
+});
+
 test('the stream’s ⋯: Copy player state and Inspect, only while it’s on', async () => {
   await a.win.keyboard.press('Escape');
   await until(a.win, () => document.querySelector('[data-action="dev-menu"]'), 'the ⋯ on the stream');
@@ -158,6 +203,7 @@ test('the stream’s ⋯: Copy player state and Inspect, only while it’s on', 
   // Off: no ⋯, and Inspect refuses even if asked.
   await a.win.evaluate(() => window.pd.setSettings({ developerTools: false }));
   await until(a.win, () => !document.querySelector('[data-action="dev-menu"]'), 'no ⋯ once it’s off');
+  assert.equal(await a.win.locator('#status-pill button').count(), 0, 'the status is just the status');
   const events = readDb(a.data, (db) => db.events().map((r) => r.e)).filter((e) => e.type === 'developer-tools');
   assert.deepEqual(events.map((e) => e.on), [true, false], 'History says it went on, then off');
   assert.equal(await a.win.evaluate(() => window.pd.developer.inspect('player')), false);

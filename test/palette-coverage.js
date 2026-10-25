@@ -45,6 +45,7 @@ const LEFT_OUT = {
   'act-toggle': 'opens one message: a row of a list, and its Copy is a command',
   'dev-toggle-row': 'opens one entry: a row of a list, and its Copy is a command',
   'dev-menu': 'opens the stream’s ⋯ menu: each of its items is a command',
+  'dev-why-step': 'steps to the drop before or after in Why isn’t this farming?, inside the dialog',
   'dev-warn-ok': 'Developer tools’ warning has to be read on its page first',
   'dev-warn-cancel': 'Developer tools’ warning has to be read on its page first',
   'recent-forget': 'removes one entry: a row of a list, and Del does it in the box',

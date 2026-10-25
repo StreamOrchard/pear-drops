@@ -136,3 +136,60 @@ test('developer.js declares nothing another page script already has (one would q
     assert.deepEqual(clash, [], `${file} also declares ${clash.join(', ')}`);
   }
 });
+
+test('Why isn’t this farming?: the checks with their marks and notes, the verdict, ‹ › through the drops, and Copy', async () => {
+  const why = {
+    at: T,
+    drops: [{ id: 'a', name: 'Neon Rush Launch Week' }, { id: 'b', name: 'Cozy <Hours>' }],
+    drop: { id: 'a', name: 'Neon Rush Launch Week', category: 'Neon Rush' },
+    stream: { slug: 'arcadia', username: 'Arcadia' },
+    checks: [
+      { step: 'state', ok: true, text: 'Running and signed in', note: 'Last checked with Kick 5s ago' },
+      { step: 'reward', ok: false, text: 'Hype Emote is waiting to be claimed' },
+      { step: 'credit', ok: null, text: 'Not watching it yet' },
+    ],
+    verdict: { farming: false, text: 'Hype Emote is waiting to be claimed' },
+  };
+  run('dev.why = w; dev.copied = null', { w: why });
+  const html = run('whyModal()');
+  assert.match(html, /role="dialog"/);
+  assert.match(html, /Neon Rush Launch Week<\/b><span>Neon Rush · watching Arcadia/);
+  assert.match(html, /why-y"><span class="why-m"><svg[\s\S]*Running and signed in<small>Last checked with Kick 5s ago<\/small>/);
+  assert.match(html, /why-x"[\s\S]*waiting to be claimed/);
+  assert.match(html, /why-n"><span class="why-m">–/);
+  assert.match(html, /why-verdict "><b>Not farming:<\/b> Hype Emote/);
+  assert.match(html, /1 of 2/);
+  assert.match(html, /data-dir="-1"[^>]*disabled/, 'nothing before the first');
+  assert.doesNotMatch(html, /data-dir="1"[^>]*disabled/);
+
+  assert.equal(
+    run('whyText(dev.why)'),
+    [`Why isn't this farming? · ${new Date(T).toLocaleString()}`, 'Neon Rush Launch Week · Neon Rush', '✓ Running and signed in (Last checked with Kick 5s ago)', '✗ Hype Emote is waiting to be claimed', '– Not watching it yet', 'Not farming: Hype Emote is waiting to be claimed'].join('\n'),
+  );
+
+  // Farming, one drop: no stepping; nothing yet: a spinner, and Copy waits.
+  run('dev.why = w', { w: { ...why, drops: [why.drops[0]], verdict: { farming: true, text: 'It’s farming' } } });
+  assert.match(run('whyModal()'), /why-verdict ok"><b>Farming:/);
+  assert.doesNotMatch(run('whyModal()'), /dev-why-step/);
+  run('dev.why = null');
+  assert.match(run('whyModal()'), /spinner[\s\S]*data-action="dev-why-copy" disabled/);
+
+  // Opening asks for the drop being watched; › asks for the next one, and stays put past the end.
+  const asked = [];
+  ctx.window.pd.developer.why = async (id) => (asked.push(id), why);
+  ctx.openModal = (name) => (ctx.ui.modal = name);
+  run('dev.menu = true; developerActions["dev-why"]()');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(run('dev.menu'), false);
+  assert.equal(run('ui.modal'), 'why');
+  assert.equal(run('dev.why.drop.id'), 'a');
+  run('developerActions["dev-why-step"]({ dataset: { dir: "1" } })');
+  await new Promise((r) => setImmediate(r));
+  run('developerActions["dev-why-step"]({ dataset: { dir: "-1" } })');
+  assert.deepEqual(asked, [null, 'b']);
+  // Closed before it answered: the answer is dropped.
+  run('ui.modal = null; dev.why = null; loadWhy()');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(run('dev.why'), null);
+  run('ui.modal = null');
+});

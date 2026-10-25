@@ -1258,7 +1258,8 @@ test('explain: paused, or signed out, fails first', async () => {
   assert.equal(why.verdict.farming, false);
   // Nothing is watched while paused: the stream and pick are what it would do.
   assert.equal(why.checks.find((k) => k.step === 'credit').ok, null);
-  assert.equal(why.checks.find((k) => k.step === 'pick').ok, null);
+  assert.deepEqual(why.checks.find((k) => k.step === 'pick'), { step: 'pick', ok: null, text: 'Nothing is picked while it’s paused' });
+  assert.equal(farmer.explain({ signedIn: false }).checks.find((k) => k.step === 'pick').text, 'Nothing is picked while signed out');
 });
 
 test('explain: Kick not responding fails the first check', async () => {

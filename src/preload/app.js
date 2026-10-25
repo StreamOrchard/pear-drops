@@ -70,7 +70,7 @@ contextBridge.exposeInMainWorld('pd', {
       return () => ipcRenderer.removeListener('connected:activity', listener);
     },
   },
-  // Settings › Developer: its lists, the report, Copy player state, Inspect, and the page's own errors.
+  // Settings › Developer: its lists, the report, Copy player state, Why isn't this farming?, Inspect, and the page's own errors.
   developer: {
     page: (list, opts) => ipcRenderer.invoke('dev:page', list, opts),
     clear: () => ipcRenderer.invoke('dev:clear'),
@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld('pd', {
     save: () => ipcRenderer.invoke('dev:save'),
     showFile: () => ipcRenderer.invoke('dev:show-file'),
     playerState: () => ipcRenderer.invoke('dev:player-state'),
+    why: (campaignId) => ipcRenderer.invoke('dev:why', campaignId ?? null),
     inspect: (which) => ipcRenderer.invoke('dev:inspect', which),
     log: (where, msg) => ipcRenderer.send('dev:log', String(where ?? '').slice(0, 200), String(msg ?? '').slice(0, 2000)),
     onChanged: (callback) => {

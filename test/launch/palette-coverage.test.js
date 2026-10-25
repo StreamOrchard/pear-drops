@@ -83,7 +83,11 @@ test('open every part of the app, and note every button and tab that shows', asy
   await click('[data-action="dev-menu"]');
   await a.win.waitForTimeout(200);
   await look('the stream’s ⋯ menu');
-  await click('[data-action="dev-menu"]');
+  // Why isn't this farming?, from the menu.
+  await click('[data-action="dev-why"]');
+  await until(a.win, () => document.querySelector('.modal.why .why-checks .why-row'), 'Why isn’t this farming?');
+  await look('Why isn’t this farming?');
+  await a.win.keyboard.press('Escape');
   // The daily reward's card, What's new and the credit banner.
   await click('[data-action="reward-open"]');
   await until(a.win, () => document.querySelector('.dr-pop'), 'the reward’s card');

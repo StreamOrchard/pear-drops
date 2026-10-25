@@ -1716,7 +1716,7 @@ class Farmer extends EventEmitter {
             ? `Smart order switches for at least ${settings.smartHopMinutes ?? 30} min less expected live time left`
             : 'It switches at the next check';
       add('pick', false, `Watching ${cur.username} for ${cur.targetName} instead`, note);
-    } else if (this.paused || !signedIn) add('pick', null, 'Nothing is picked while it’s paused or signed out');
+    } else if (this.paused || !signedIn) add('pick', null, `Nothing is picked while ${signedIn ? 'it’s paused' : 'signed out'}`);
     else add('pick', null, 'A stream is picked at the next check', this.nextTickAt ? `In ${Math.max(0, Math.round((this.nextTickAt - now) / 1000))}s` : '');
 
     // 6. Watch events arriving, and being credited.
