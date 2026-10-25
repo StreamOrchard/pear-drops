@@ -111,6 +111,19 @@ test('the activity chart is by hour on a first day or the last 24 hours, and by 
   assert.equal(day.activity.bars.length, 25, 'the last 24 hours, by the hour');
 });
 
+test('view(): credit elsewhere while nothing was farmed is no loss, and is left out', () => {
+  const { history } = fresh();
+  const now = Date.now();
+  session(history, { start: now - 3 * 3600_000, minutes: 20 });
+  history.add('credit-elsewhere', { t: now - 3 * 3600_000 + 10 * MIN, campaignId: 'c2', delta: 2 });
+  history.add('credit-elsewhere', { t: now - 3600_000, campaignId: 'c2', delta: 2 }); // idle, from an older version
+
+  const v = history.view({ now });
+  assert.equal(v.totals.elsewhere, 2);
+  assert.equal(v.events.filter((e) => e.type === 'credit-elsewhere').length, 1);
+  assert.equal(history.view({ now, campaignId: 'c2' }).totals.elsewhere, 2, 'and for the drop it went to');
+});
+
 test('view(): totals, per-drop summaries, channels, daily and hourly figures', () => {
   const { history } = fresh();
   const now = Date.now();
@@ -118,7 +131,7 @@ test('view(): totals, per-drop summaries, channels, daily and hourly figures', (
   session(history, { start: now - 3 * 3600_000, minutes: 20, slug: 'b' });
   history.add('claim', { t: now - 2 * 3600_000, campaignId: 'c1', campaign: 'Neon', reward: 'Hype Emote' });
   history.add('conflict', { t: now - 3600_000 });
-  history.add('credit-elsewhere', { t: now - 3600_000, campaignId: 'c2', delta: 2 });
+  history.add('credit-elsewhere', { t: now - 3 * 3600_000 + 10 * MIN, campaignId: 'c2', delta: 2 });
 
   const v = history.view({ now });
   assert.equal(v.totals.watchMs, 60 * MIN);

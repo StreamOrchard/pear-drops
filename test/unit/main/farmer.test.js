@@ -180,6 +180,25 @@ test('credits are recorded with running totals and reset the stall clock', async
   assert.equal(farmer.stats.earned, 2);
 });
 
+test('credit to a drop it isn\'t watching is lost while farming, and nothing while idle', async () => {
+  const done = campaign('d', { category: { id: 2, name: 'Pixel Pear' } });
+  const { farmer, api, history } = setup({ campaigns: [campaign('a'), done], streams: { 1: [live('s', 1)] }, units: { a: 10, d: 500 } });
+  await farmer.tick();
+  api.units.d = 502;
+  await farmer.tick();
+  const lost = history.all().filter((e) => e.type === 'credit-elsewhere');
+  assert.deepEqual(lost.map((e) => [e.campaignId, e.delta, e.units]), [['d', 2, 502]]);
+  assert.ok(farmer.log.some((l) => l.level === 'alert' && l.text.includes('+2 min went to Campaign d')));
+
+  const idle = setup({ campaigns: [campaign('a'), done], units: { a: 10, d: 500 } });
+  await idle.farmer.tick();
+  assert.equal(idle.farmer.current, null);
+  idle.api.units.d = 502;
+  await idle.farmer.tick();
+  assert.equal(idle.history.all().filter((e) => e.type === 'credit' || e.type === 'credit-elsewhere').length, 0);
+  assert.equal(idle.farmer.prevUnits.get('d'), 502, 'the next credit counts from here');
+});
+
 test('a stall reloads first, then switches to another stream', async () => {
   const { farmer, watcher, history } = setup({ campaigns: [campaign('a')], streams: { 1: [live('first', 1, 500), live('second', 2, 100)] } });
   await farmer.tick();

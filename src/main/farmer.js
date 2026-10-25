@@ -494,7 +494,9 @@ class Farmer extends EventEmitter {
           // Credit landed on a campaign we aren't watching: another session has it.
           this.addLog('alert', `+${delta} min went to ${p.name}, which this app isn't watching. Another Kick stream on your account is getting the credit`);
         }
-        this.record(watching ? 'credit' : 'credit-elsewhere', {
+        // Not farming, nothing was lost: the minutes are from watching on kick.com or elsewhere
+        // (Kick keeps counting them on drops that are already done).
+        if (watching || this.current) this.record(watching ? 'credit' : 'credit-elsewhere', {
           ...this.ctx(p.id),
           campaign: p.name,
           ...(watching ? this.streamCtx() : {}),
