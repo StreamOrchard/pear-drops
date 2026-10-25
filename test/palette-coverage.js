@@ -7,6 +7,8 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
+/** A page's code, with Windows line endings (a Windows checkout) as \n. */
+const read = (f) => fs.readFileSync(path.join(RENDERER, f), 'utf8').replace(/\r\n/g, '\n');
 
 /** Actions a command reaches without runAction('<action>'), and how. */
 const INDIRECT = {
@@ -81,7 +83,7 @@ const OTHER_SETTINGS = {
 
 /** runAction('<action>') in palette-items.js: the actions its commands run. */
 function runActions() {
-  const src = fs.readFileSync(path.join(RENDERER, 'palette-items.js'), 'utf8');
+  const src = read('palette-items.js');
   return new Set([...src.matchAll(/runAction\('([a-z-]+)'/g)].map((m) => m[1]));
 }
 
@@ -89,14 +91,14 @@ function runActions() {
 function pageActions() {
   const out = new Map();
   for (const f of fs.readdirSync(RENDERER).filter((x) => x.endsWith('.js') && x !== 'palette.js' && x !== 'palette-items.js')) {
-    for (const m of fs.readFileSync(path.join(RENDERER, f), 'utf8').matchAll(/data-action="([a-z-]+)"/g)) out.set(m[1], [...(out.get(m[1]) ?? []), f]);
+    for (const m of read(f).matchAll(/data-action="([a-z-]+)"/g)) out.set(m[1], [...(out.get(m[1]) ?? []), f]);
   }
   return out;
 }
 
 /** The ids of SETTINGS_ROWS in app.js. */
 function settingRows() {
-  const src = fs.readFileSync(path.join(RENDERER, 'app.js'), 'utf8');
+  const src = read('app.js');
   const start = src.indexOf('const SETTINGS_ROWS = [');
   const end = src.indexOf('\n];\n', start);
   if (start < 0 || end < 0) throw new Error('SETTINGS_ROWS not found in app.js');
