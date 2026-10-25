@@ -733,7 +733,7 @@ function initPaletteItems() {
     if (t.length < 2) return [];
     const history = () => openHistory({ table: 'timeline', text: t });
     return [
-      { id: 'search:history', kind: 'place', group: 'History', title: `Search History for “${t}”`, sub: 'Every event recorded on this computer', icon: 'clock', run: history, last: true },
+      { id: 'search:history', kind: 'place', group: 'History', title: `Search History for “${t}”`, sub: 'Every event recorded on this computer', icon: 'clock', run: history, last: true, elsewhere: true },
       { id: 'search:history:none', kind: 'place', group: 'History', title: `Search History for “${t}”`, sub: 'Every event recorded on this computer', icon: 'clock', run: history, fallback: true, order: 1 },
       { id: 'search:kick', kind: 'place', group: 'Kick', title: `Search kick.com for “${t}”`, sub: 'In your browser', icon: 'external', run: () => runAction('open-link', { url: `https://kick.com/search?query=${encodeURIComponent(t)}` }), fallback: true, order: 2 },
     ];

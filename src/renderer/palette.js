@@ -22,6 +22,7 @@ const pal = {
   sel: 0, // the selected row
   btn: 0, // the selected button on the big row
   opt: null, // the option picked on a choice's row (← →)
+  optFor: null, // the row it was picked on
   stack: [], // Tab: [{ item, text, sel }], the rows the list was showing before
   back: null, // where the keyboard was before the box opened
   why: '', // why the last thing couldn't run (shown in the footer)
@@ -97,7 +98,8 @@ function palCollect() {
   }
   if (!text && !pal.scope) return palEmptyRows();
   let found = commands.search(text, { scope: pal.scope });
-  if (!found.length) return commands.fallbacks(text).map((item) => ({ item, marks: [] }));
+  // Only the words looked for elsewhere (Search History for "…"): nothing found, with what's still worth offering.
+  if (found.every((r) => r.item.elsewhere)) return commands.fallbacks(text).map((item) => ({ item, marks: [] }));
   const hero = palHeroOf(found, text);
   // Each group together, where its best row is (the big row first, and not again below it).
   found = commands.grouped(found.filter((r) => r.item.id !== hero?.item.id)).flatMap((g) => g.rows);
@@ -225,10 +227,15 @@ function palRender() {
   palPickOpt();
   palDraw();
 }
-/** A choice's row starts with its current option picked. */
+/** A choice's row starts with its current option picked (and keeps the one picked while the list redraws). */
 function palPickOpt() {
   const it = pal.rows[pal.sel]?.item;
-  if (!it?.choice) return (pal.opt = null);
+  if (!it?.choice) {
+    pal.optFor = null;
+    return (pal.opt = null);
+  }
+  if (pal.optFor === it.id && pal.opt !== null) return;
+  pal.optFor = it.id;
   const cur = String(it.choice.get());
   pal.opt = Math.max(0, it.choice.options.findIndex(([v]) => String(v) === cur));
 }
@@ -329,7 +336,10 @@ function palRun(i, how) {
   pal.why = commands.run(it, how, arg);
   if (pal.why) return palFoot();
   // A switch flips (and a choice is set) where it is.
-  if ((it.toggle || it.choice) && how === 'run') return palRender();
+  if ((it.toggle || it.choice) && how === 'run') {
+    pal.optFor = null;
+    return palRender();
+  }
   closePalette(false);
   const done = commands.value(button ? button.done : how === 'run' ? it.done : null);
   if (done) palFlash(done);
