@@ -1,0 +1,23 @@
+name: Something isn't working
+description: A bug, or something that stopped working
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. A screenshot or a short video helps.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: In Pear Drops, open Settings › Developer and press Copy diagnostics, then paste them here. Your Kick login, cookies and keys are left out; channel names can be in it, so look it over first.
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: "For a stream that's stuck, silent or not credited: turn on Developer tools in Settings › Developer, choose Copy player state from the ⋯ on the stream's header, and paste it here."
+      render: text

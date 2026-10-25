@@ -60,6 +60,10 @@ Pear Drops updates itself: Settings › Updates shows when there's a new version
 - **Updates from GitHub** (Settings › Updates): checks the project's latest release, with its notes and a What's new timeline. Installed copies download the new installer (on a Mac, the app swaps itself in on restart); copies run from source get the new files, keeping a backup. After an update, the app shows what changed once.
 - **Connected apps** (Settings › Connected apps): links Pear Drops with [Stream Multiview](https://github.com/GlowingPear/stream-window-multiview) on the same computer, through [Grapevine](https://github.com/StreamOrchard/grapevine). Off until you switch it on in both apps. While you farm, multiview can sign its Kick players out so they don't take the drop credit, and show what you're farming. If its signed-in players do take the credit, the banner says so. Each app's card shows its logo, what it is, where to get it, what the two share and how the link is going. **Activity** on the card shows every message between the two since Pear Drops started, in plain words: the totals each way, the heartbeat, a chart of the last 30 minutes, and each message's fields.
 - **Desktop notifications** (Settings › Notifications): pick which ones you want, all off to start with. They cover a drop claimed or ready to claim, a stream ending or raiding, stream problems, credit going to another stream, signing in again, everything collected or nothing live, and new drops on Kick. They can be limited to when Pear Drops isn't in front. "Send a test" checks your computer allows them, and a button opens its notification settings.
+- **Settings › Developer**, for finding out why something isn't working and reporting it:
+  - **Copy diagnostics** (or **Save to Downloads**): your version and system, what's farming, the settings, and the lists below, as text for an issue. Your Kick login, cookies and keys are left out, and the account's name never goes in.
+  - **Errors** (the last 200, from this run and the one before), **Requests** to Kick with their status (**Errors only** shows those that failed), and the player's **Watch events**, each marked once Kick credits it. A click opens one, with Copy.
+  - The **Developer tools** switch (off at first) adds a ⋯ to the stream's header with **Copy player state** and **Inspect** for the stream and Kick's page, and keeps the text of Kick's answers in Requests. The first time, it says that Inspect can read your Kick login. Turning it on or off is recorded in History.
 - **Font** (Settings › App): your computer's own font on macOS and Windows, or Inter, which comes with the app and looks the same everywhere. Linux uses Inter by default.
 
 ## Run from source
@@ -98,6 +102,7 @@ The app never sends watch events itself. It runs the real kick.com channel page,
 - The database is backed up to `backups/` in the data folder every day (or week, or not at all: **Settings › Privacy & data**), keeping the last 3 copies (or 7 or 14), and before any update that changes how it's stored. If it's ever damaged, the app puts the newest good copy back by itself and says so in History.
 - Connected apps talk only on this computer, through a private local socket (a named pipe on Windows), after you've switched the link on in both. The first time, Pear Drops asks before it pairs (**Allow** on the card), so another program can't pair as Stream Multiview by itself. Pear Drops tells them what it's farming, never your login. Pairing keys are kept in `grapevine.json`, encrypted with your system keychain.
 - Kick's pages can't reach the app (`src/main/guard.js`): the app only answers messages from its own windows, a Kick page opens a link in your browser only just after you clicked in it, and only web addresses ever open (never another app's protocol). The sign-in window stays on Kick and its sign-in providers. No page gets the camera, microphone, screen or clipboard reading.
+- Settings › Developer keeps what it shows on this computer and sends nothing anywhere: only what you copy or save leaves the app. Logins, cookies and keys are taken out as each error or request comes in, and the text of Kick's answers is only kept, in memory, while Developer tools are on. Inspect only opens while they're on.
 - Installed copies ignore the `PD_` settings that tests and developer copies use (a stand-in GitHub, demo mode, another data folder), refuse debugging switches such as `--remote-debugging-port`, and only run the app files they were built with (Electron's asar integrity fuses).
 
 ## Development
@@ -129,6 +134,7 @@ src/main/        Electron main process
   notifier.js    desktop notifications: which kinds are on, repeats, Send a test
   connected.js   Settings › Connected apps: the Grapevine link with other apps, what Pear Drops tells them
   activity.js    the Activity log: every message each way this run, kept in memory
+  devlog.js      Settings › Developer: the errors, requests and watch events, and Copy diagnostics
   security.js    login encryption migration, forget-on-quit, where links and pop-ups go
   guard.js       what the app lets in: who may send its messages, what pages may ask for, the PD_ settings
   demo.js        stand-in Kick for tests, demos and the trailer
@@ -176,8 +182,16 @@ Only the first two stop the Keychain prompt after updates. Release builds should
 
 ## Notes and limitations
 
-- Kick can change its site or API at any time. If drops stop progressing, check the History view's timeline for errors.
+- Kick can change its site or API at any time. If drops stop progressing, check the History view's timeline and **Settings › Developer** for errors.
 - Some campaigns require a specific channel. When none of those channels is live, the category waits ("Offline") and the app farms the next one.
+
+## Reporting a problem
+
+1. Open **Settings › Developer** and press **Copy diagnostics**. If you can, make the problem happen again first: the newest errors are at the top.
+2. Open an issue (**Issues › New issue › Something isn't working**) and paste them in the **Diagnostics** box. Say what you did, what you expected and what happened instead.
+3. **The stream is stuck, silent or not credited?** Turn on **Developer tools**, choose **Copy player state** from the ⋯ on the stream's header, and paste that too.
+
+Channel names can be in what you paste, so look it over first.
 
 ## Disclaimer
 
