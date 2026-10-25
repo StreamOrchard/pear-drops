@@ -334,12 +334,15 @@ function prizeLine(won) {
   return w.name ? `<b>${esc(w.name)}</b><span>${cardKind(w)}</span>${status}` : `<b>${cardKind(w)}</b>${status}`;
 }
 
-/** The prizes an event has given, a slot a day: newest first, the empty days still to come. */
+/**
+ * The prizes an event has given, a slot a day: in the order they were won (the newest that fit),
+ * then the empty days still to come.
+ */
 function prizeStrip(e, where) {
   const prizes = e.prizes ?? [];
   if (!prizes.length) return '';
   const slots = Math.max(prizes.length ? 1 : 0, Math.min(e.days ?? prizes.length, where === 'tray' ? 7 : 8));
-  const shown = prizes.slice(0, slots);
+  const shown = prizes.slice(0, slots).reverse(); // e.prizes is newest first
   const tiles = shown.map((p) => `<span class="dr-won-tile r-${esc(p.rarity)}" data-tip="${esc([p.name, cardKind(p), fmtWonDay(p.at)].filter(Boolean).join(' · '))}">${img(p.image, '', p.name || cardKind(p))}<small>${fmtWonDay(p.at)}</small></span>`);
   const empty = '<span class="dr-won-tile open"></span>'.repeat(Math.max(0, slots - shown.length));
   return `<div class="dr-won"><div class="dr-won-head"><span>Won this event</span><b>${n(prizes.length)}</b><span class="spacer"></span>${e.days ? `<span class="dr-won-days">${n(Math.min(prizes.length, e.days))} of ${n(e.days)} days</span>` : ''}</div>
