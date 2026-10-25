@@ -58,6 +58,7 @@ Follow `drive-app`. It uses demo mode (stand-in Kick, made-up channels), so capt
 - No system pop-ups (`alert`, `confirm`, native message boxes or menus, `<datalist>`, date pickers). `npm test` checks this.
 - Keep the dashboard fitting a maximized window without page scrolling. Ticking values must not shift the layout or rebuild images: `test/launch/farming.test.js` checks this.
 - Add tests next to similar ones for every new code path. Coverage minimums can't go down.
+- Anything new a person can click, open or set (a button, a tab or filter, a setting) gets a command in the search box, in `src/renderer/palette-items.js` (a setting: a row in `SETTINGS_ROWS`). A new part of the app gets opened in `test/launch/palette-coverage.test.js`. See *The search box* in `CLAUDE.md`.
 - Try it in the real app (`run-dev`). Main-process changes need a restart; pages need Cmd/Ctrl+R.
 - Capture "after" with the same steps as "before".
 - Commit in small, clear commits. Don't change the version or `CHANGELOG.md`.

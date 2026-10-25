@@ -1,8 +1,8 @@
 /* global commands, palette, actions, state, ui, farm, dailyReward, currentCampaigns, categoryEta, trackedRewards, channelNames, alarm, upd, dev, devOn, act, hist, SETTINGS_TABS, SETTINGS_ROWS, NOTIFY_KINDS, settingValue, settingWords, openSettings, openSide, openHistory, openModal, openReward, render, crateList, icon, img, esc, fmtMin, fmtDur, fmtEnds, fmtCount, signedInPlayers */
 // What the search box (Ctrl/⌘+K, palette.js) finds in Pear Drops: every drop, reward and channel, every action, every
 // tab and filter by name, and Settings' options. A button with a data-action gets a command here that runs the same
-// action (runAction), so the button and the box can't do different things; test/launch/palette.test.js fails on a
-// button without one (the few left out are listed there, each with why).
+// action (runAction), so the button and the box can't do different things. The palette-coverage tests (unit and
+// launch) fail on a button, tab or setting without one; the few left out are in test/palette-coverage.js, with why.
 
 const IS_MAC = navigator.platform.startsWith('Mac');
 const TRAY = IS_MAC ? 'menu bar' : 'tray';
@@ -513,7 +513,7 @@ function settingItems() {
     },
     alt: () => openSettings('developer'),
   });
-  if (upd.status && !upd.status.devCopy)
+  if (upd.status)
     out.push({
       id: 'set:update-auto',
       kind: 'setting',
@@ -522,6 +522,7 @@ function settingItems() {
       sub: ['Settings › Updates', 'downloads each new version as it’s out'],
       words: ['updates'],
       icon: 'sparkle',
+      disabled: () => (upd.status?.devCopy ? 'This copy runs from a folder you’re working in' : ''),
       toggle: { get: () => !!upd.status?.auto, set: () => runAction('update-auto') },
       alt: () => openSettings('updates'),
     });

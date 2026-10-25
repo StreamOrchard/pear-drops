@@ -8,7 +8,7 @@
 
 ## Tests
 
-<!-- Which tests cover it (test/unit/…, test/launch/…), and what you checked by hand. -->
+<!-- Which tests cover it (test/unit/…, test/launch/…), and what you checked by hand. A new button, tab or setting is a command in the search box (Ctrl/⌘+K): say which. -->
 
 ## Before / after
 

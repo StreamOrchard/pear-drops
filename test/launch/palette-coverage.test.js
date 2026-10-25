@@ -1,55 +1,20 @@
-// Every button and tab in the app is also a command of the search box (Ctrl/⌘+K): this opens each part of the real
-// app in demo mode and fails on a visible [data-action] that no command runs. A command runs a button's action with
-// runAction('<action>') in src/renderer/palette-items.js, or reaches its place another way (INDIRECT, each with how).
-// The few left out are in LEFT_OUT, each with why.
+// Every button, tab and setting in the app is also a command of the search box (Ctrl/⌘+K): this opens each part of
+// the real app in demo mode and fails on a visible [data-action] that no command runs, a tab or filter with no command
+// of its own, or a Settings control with none. A command runs a button's action with runAction('<action>') in
+// src/renderer/palette-items.js, or reaches its place another way; test/palette-coverage.js lists those, and the few
+// left out, each with why (test/unit/renderer/palette-coverage.test.js checks the same lists against the code).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const { launchApp, until, ROOT } = require('./app');
+const { launchApp, until } = require('./app');
 
-/** Actions a command reaches without runAction, and how. */
-const INDIRECT = {
-  palette: 'the box’s own button',
-  settings: 'Settings › each page (openSettings)',
-  'settings-tab': 'Settings › each page (openSettings)',
-  'setting-toggle': 'each Settings switch (window.pd.setSettings)',
-  'queue-mode': 'Queue order, a Settings choice that runs its own action (SETTINGS_ROWS action)',
-  'side-tab': 'Queue, Done, Streams, Activity (openSide)',
-  'past-filter': 'Done: All, Completed, Missed (openSide)',
-  'select-cat': 'Streams: each drop (openSide)',
-  expand: 'a drop’s Show in queue (openSide opens its row)',
-  'hist-range': 'History: each range (openHistory)',
-  'hist-table': 'History: each table (openHistory)',
-  'hist-group': 'History: each event group, a switch (openHistory)',
-  'hist-campaign': 'a drop’s In History (openHistory)',
-  'coming-pick': 'Coming soon: each drop (ui.comingIdx)',
-  'reward-claim': 'Claim the daily reward (its card’s Claim, clicked)',
-  'reward-replay': 'Replay the last reward (its card’s Replay, clicked)',
-  'update-chip': 'Install the update, Restart to update and Settings › Updates',
-  show: 'the tray popover’s Open Pear Drops: the box is in that window',
-  quit: 'Quit Pear Drops (window.pd.quit, from the dashboard)',
-};
-/** Left out on purpose, each with why. */
-const LEFT_OUT = {
-  'close-modal': 'closes a dialog: Esc does that',
-  'close-whatsnew': 'closes What’s new (its Nice button): Esc does that',
-  'reward-close': 'closes the reward’s card: Esc does that',
-  'reward-back': 'the tray’s back arrow, inside its own window',
-  'reward-done': 'ends the reveal that’s playing',
-  'act-close': 'Activity’s back arrow: Esc does that',
-  'act-toggle': 'opens one message: a row of a list, and its Copy is a command',
-  'dev-toggle-row': 'opens one entry: a row of a list, and its Copy is a command',
-  'dev-menu': 'opens the stream’s ⋯ menu: each of its items is a command',
-  'dev-warn-ok': 'Developer tools’ warning has to be read on its page first',
-  'dev-warn-cancel': 'Developer tools’ warning has to be read on its page first',
-};
+const { INDIRECT, LEFT_OUT, TABS, runActions } = require('../palette-coverage');
 
-const source = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'palette-items.js'), 'utf8');
-const RUN = new Set([...source.matchAll(/runAction\('([a-z-]+)'/g)].map((m) => m[1]));
+const RUN = runActions();
 
 let a;
 const seen = new Map(); // action -> where it showed
+const tabs = new Map(); // a tab's command id -> where it showed
+const controls = new Map(); // a Settings control's command id -> where it showed
 test.before(async () => {
   a = await launchApp({ size: { width: 1512, height: 944 } });
   await a.farming();
@@ -59,9 +24,21 @@ test.after(async () => {
   await a.close();
 });
 
-const visible = (page) => page.evaluate(() => [...document.querySelectorAll('[data-action]')].filter((e) => !e.closest('#palette-root') && e.checkVisibility()).map((e) => e.dataset.action));
+// What shows: each button's action and data-id, and each Settings control's setting (or notification kind).
+const visible = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('[data-action], [data-setting]')]
+      .filter((e) => !e.closest('#palette-root') && e.checkVisibility())
+      .map((e) => ({ action: e.dataset.action, id: e.dataset.id, key: e.dataset.key ?? e.dataset.setting, kind: e.dataset.kind, actApp: typeof act === 'undefined' ? null : act.app })),
+  );
+const CONTROLS = { 'setting-toggle': (e) => `set:${e.key}`, 'setting-value': (e) => `set:${e.key}`, 'queue-mode': () => 'set:queueMode', 'notify-toggle': (e) => `set:notify:${e.kind}`, 'dev-switch': () => 'set:developerTools', 'update-auto': () => 'set:update-auto', 'connected-toggle': (e) => `set:connect:${e.id}` };
 async function look(where, page = a.win) {
-  for (const name of await visible(page)) if (!seen.has(name)) seen.set(name, where);
+  for (const e of await visible(page)) {
+    if (e.action && !seen.has(e.action)) seen.set(e.action, where);
+    if (e.action && TABS[e.action] && e.id) tabs.set(TABS[e.action](e.id, e), `${e.action} ${e.id} in ${where}`);
+    const control = !e.action ? `set:${e.key}` : CONTROLS[e.action]?.(e);
+    if (control && where.startsWith('Settings')) controls.set(control, `${e.action ?? 'a slider'} ${e.key ?? e.kind ?? e.id ?? ''} in ${where}`);
+  }
 }
 const click = (sel) => a.win.click(sel);
 
@@ -143,8 +120,9 @@ test('each one is a command, or left out with why', () => {
   );
 });
 
-test('the lists stay honest: nothing both covered and left out, and every action named is one the app has', () => {
-  for (const name of Object.keys(LEFT_OUT)) assert.ok(!RUN.has(name) && !INDIRECT[name], `${name} is covered and left out`);
-  const app = fs.readdirSync(path.join(ROOT, 'src', 'renderer')).filter((f) => f.endsWith('.js')).map((f) => fs.readFileSync(path.join(ROOT, 'src', 'renderer', f), 'utf8')).join('\n');
-  for (const name of [...RUN, ...Object.keys(INDIRECT), ...Object.keys(LEFT_OUT)]) assert.ok(app.includes(`data-action="${name}"`), `no button runs ${name}`);
+test('each tab and filter is a command of its own, and each Settings control is one too', async () => {
+  const ids = new Set(await a.win.evaluate(() => commands.all().map((x) => x.id)));
+  const missing = [...tabs, ...controls].filter(([id]) => !ids.has(id)).map(([id, where]) => `${id} (${where})`);
+  assert.ok(tabs.size > 25 && controls.size > 20, `${tabs.size} tabs and ${controls.size} controls seen`);
+  assert.deepEqual(missing, [], 'give these a command of their own in palette-items.js (a place, or a Settings row in SETTINGS_ROWS)');
 });
