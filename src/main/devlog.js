@@ -259,7 +259,7 @@ function reportLines({ farm, settings = {}, auth = {}, schema, backups, updates,
   if (farm) {
     lines.push(['farming', `${farm.status?.code ?? '?'}: ${farm.status?.message ?? ''}${farm.paused ? ' · paused' : ''} · conflict ${tick(farm.conflict)}`]);
     lines.push(['stream', cur ? `${cur.slug} · ${cur.categoryName ?? ''}${cur.manual ? ' · picked by you' : ''}` : 'none']);
-    if (cur) lines.push(['player', `${farm.player?.mode ?? '?'} · ${farm.health?.text ?? '?'} · ${farm.player?.eventsSent ?? 0} watch events · last ${ago(farm.player?.lastEventAt, now)}`]);
+    if (cur) lines.push(['player', `${farm.player?.mode ?? '?'} · ${farm.health?.text ?? '?'} · ${farm.player?.eventsSent ?? 0} watch event${farm.player?.eventsSent === 1 ? '' : 's'} · last ${ago(farm.player?.lastEventAt, now)}`]);
     for (const c of (farm.categories ?? []).flatMap((k) => k.campaigns ?? []).filter((k) => k.watching)) {
       const f = farm.forecast?.[c.id];
       lines.push(['drop', `${c.name}: ${c.units ?? 0} of ${c.targetUnits ?? '?'} min${f ? ` · ${f.rate.toFixed(2)} min/min${f.observed ? '' : ' (expected)'}${f.stalled ? ' · stalled' : ''}` : ''}`]);
