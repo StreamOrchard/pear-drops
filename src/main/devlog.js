@@ -175,6 +175,11 @@ class DevLog {
     for (const l of Object.values(this.lists)) l.length = 0;
   }
 
+  /** Developer tools turned off: the answers' text kept so far goes too (Kick's account answer has the email address). */
+  forgetAnswers() {
+    for (const e of this.lists.requests) delete e.body;
+  }
+
   /** What to store for the next run: this run's errors. */
   toSave() {
     return this.lists.errors.filter((e) => !e.before).map(({ t, src, where, msg, count }) => ({ t, src, where, msg, count }));

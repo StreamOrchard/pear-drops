@@ -6398,7 +6398,9 @@ button.act-row:hover,
   background: rgba(255, 93, 110, 0.08);
   color: var(--text);
 }
-.dev-list {
+.act-list.dev-list {
+  /* Sized by the room left, never by its rows, so a page asked for before it was measured can't make it scroll. */
+  flex: 1 1 0 !important;
   min-height: 100px;
 }
 .dev-row.dev-before {

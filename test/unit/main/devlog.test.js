@@ -124,6 +124,9 @@ test('requests: what was asked, the answer, and Errors only', () => {
   assert.equal(log.page('errors', { filter: 'problems' }).total, 0, 'Errors only is for Requests');
   assert.ok(badAnswer({ status: 0 }) && badAnswer({ status: 302 }) && !badAnswer({ status: 204 }));
   assert.ok(log.request({ url: 'https://kick.com/emotes', status: 200, body: 'x'.repeat(30_000) }).body.length <= 20_000, 'a long answer is cut off');
+  log.forgetAnswers();
+  assert.ok(log.list('requests').every((e) => !('body' in e)), 'Developer tools off: the answers kept so far go');
+  assert.equal(log.page('requests').total, 5, 'the requests stay');
 });
 
 test('watch events: how long after the one before, credited once progress goes up on their stream', () => {

@@ -156,8 +156,12 @@ test('the stream’s ⋯: Copy player state and Inspect, only while it’s on', 
   await until(a.win, () => !document.querySelector('.dev-menu'), 'the menu closes');
   assert.deepEqual(await a.app.evaluate(() => global.pdInspected), ['player']);
   // Off: no ⋯, and Inspect refuses even if asked.
-  await a.app.evaluate(() => global.pdDebug.store.set({ developerTools: false }));
+  await a.win.evaluate(() => window.pd.setSettings({ developerTools: false }));
+  await until(a.win, () => !document.querySelector('[data-action="dev-menu"]'), 'no ⋯ once it’s off');
+  const events = readDb(a.data, (db) => db.events().map((r) => r.e)).filter((e) => e.type === 'developer-tools');
+  assert.deepEqual(events.map((e) => e.on), [true, false], 'History says it went on, then off');
   assert.equal(await a.win.evaluate(() => window.pd.developer.inspect('player')), false);
+  assert.ok((await a.win.evaluate(() => window.pd.developer.page('requests', { limit: 50 }))).entries.every((e) => e.body === undefined), 'the answers kept so far are gone');
   assert.deepEqual(await a.app.evaluate(() => global.pdInspected), ['player']);
 });
 

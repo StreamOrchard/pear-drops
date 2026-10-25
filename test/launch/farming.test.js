@@ -311,15 +311,19 @@ test('every Settings tab fits without scrolling; only the changelog under Update
   assert.ok(tabs.length >= 8);
   for (const id of tabs) {
     await a.win.click(`[data-action="settings-tab"][data-id="${id}"]`);
-    if (id === 'updates') await until(a.win, () => document.querySelector('.upd-timeline li'), 'the changelog', 10000);
+    if (id === 'updates') {
+      await until(a.win, () => document.querySelector('.upd-timeline li'), 'the changelog', 10000);
+      const timeline = await a.win.evaluate(() => getComputedStyle(document.querySelector('.pane-updates .upd-timeline')).overflowY);
+      assert.equal(timeline, 'auto', 'the changelog scrolls inside itself');
+    }
+    // Settings › Developer: with its list's first page in.
+    if (id === 'developer') await until(a.win, () => document.querySelector('.dev-list .act-empty, .dev-list .dev-row'), 'the list', 10000);
     const [content, box] = await a.win.evaluate(() => {
       const p = document.querySelector('.settings-pane');
       return [p.scrollHeight, p.clientHeight];
     });
     assert.ok(content <= box + 1, `Settings › ${id} needs ${content - box}px of scrolling`);
   }
-  const timeline = await a.win.evaluate(() => getComputedStyle(document.querySelector('.pane-updates .upd-timeline')).overflowY);
-  assert.equal(timeline, 'auto', 'the changelog scrolls inside itself');
   await a.win.keyboard.press('Escape');
 });
 

@@ -923,6 +923,7 @@ function inspect(which) {
 /** Developer tools switched on or off: the answers' text kept or not, Inspect closed, and History told. */
 function setDeveloperTools(on) {
   api.keepAnswers = on;
+  if (!on) devLog.forgetAnswers();
   if (!on) for (const wc of [watcher?.view?.webContents, api?.win?.webContents]) if (wc && !wc.isDestroyed() && wc.isDevToolsOpened()) wc.closeDevTools();
   history.add('developer-tools', { on, text: on ? 'Developer tools turned on: Inspect can read the Kick login' : 'Developer tools turned off' });
   devChanged();
