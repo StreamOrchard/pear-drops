@@ -2,7 +2,10 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.26 (current)
+## 0.1.27 (current)
+- Opening a row at the bottom of Settings › Developer's lists or a connected app's Activity keeps it open, instead of the list flickering and the row disappearing
+
+## 0.1.26
 - Credit lost only counts while farming: watching a drop on kick.com while Pear Drops is idle no longer shows as lost
 - Settings › Search box: turn the search box or its Recent off, and see, remove and clear what it remembers
 - Why isn't this farming? (Developer tools): the farmer's checks for a drop, in order, and the first that failed
