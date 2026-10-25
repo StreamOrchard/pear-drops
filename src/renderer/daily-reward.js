@@ -257,7 +257,7 @@ function cardHead(crates, active, { where, title, sub, theme }) {
   const close = where === 'tray' ? `<button class="btn sm icon-only ghost" data-action="reward-back" data-tip="Back">${icon('chevronLeft')}</button>` : '';
   const x = where === 'pop' ? `<button class="btn sm icon-only ghost" data-action="reward-close" data-tip="Close (Esc)">${icon('x')}</button>` : '';
   if (crates.length < 2) return `<div class="dr-head">${close}${chestMark()}<b>${esc(title)}</b>${sub ? `<span class="dr-head-sub">${sub}</span>` : ''}<span class="spacer"></span>${x}</div>`;
-  return `<div class="dr-head tabs">${close}<div class="dr-tabs" role="tablist">${crateTabs(crates, active)}</div><span class="spacer"></span>${x}</div>
+  return `<div class="dr-head with-tabs">${close}<div class="dr-tabs" role="tablist">${crateTabs(crates, active)}</div><span class="spacer"></span>${x}</div>
     <div class="dr-subline theme-${esc(theme)}"><b>${esc(title)}</b>${sub ? `<span class="dr-head-sub">${sub}</span>` : ''}</div>`;
 }
 
@@ -341,7 +341,7 @@ function prizeStrip(e, where) {
   const slots = Math.max(prizes.length ? 1 : 0, Math.min(e.days ?? prizes.length, where === 'tray' ? 7 : 8));
   const shown = prizes.slice(0, slots);
   const tiles = shown.map((p) => `<span class="dr-won-tile r-${esc(p.rarity)}" data-tip="${esc([p.name, cardKind(p), fmtWonDay(p.at)].filter(Boolean).join(' · '))}">${img(p.image, '', p.name || cardKind(p))}<small>${fmtWonDay(p.at)}</small></span>`);
-  const empty = '<span class="dr-won-tile empty"></span>'.repeat(Math.max(0, slots - shown.length));
+  const empty = '<span class="dr-won-tile open"></span>'.repeat(Math.max(0, slots - shown.length));
   return `<div class="dr-won"><div class="dr-won-head"><span>Won this event</span><b>${n(prizes.length)}</b><span class="spacer"></span>${e.days ? `<span class="dr-won-days">${n(Math.min(prizes.length, e.days))} of ${n(e.days)} days</span>` : ''}</div>
     <div class="dr-won-row">${tiles.join('')}${empty}</div></div>`;
 }

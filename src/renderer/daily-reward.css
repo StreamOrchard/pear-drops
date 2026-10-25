@@ -727,7 +727,7 @@
 }
 
 /* ------------------------------------------------------------- one tab per crate */
-.dr-head.tabs {
+.dr-head.with-tabs {
   gap: 4px;
   margin: -2px -4px 0;
   height: 32px;
@@ -999,7 +999,7 @@
   color: var(--faint);
   white-space: nowrap;
 }
-.dr-won-tile.empty {
+.dr-won-tile.open {
   box-shadow: none;
   border: 1px dashed var(--border-2);
   background: none;
