@@ -2,7 +2,10 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.23 (current)
+## 0.1.24 (current)
+- The crate tabs sit on the card with no bar behind them, and an event's empty days are square slots
+
+## 0.1.23
 - The crate tabs sit on the card with no bar behind them, and an event's empty days are square slots
 
 ## 0.1.22
