@@ -2,7 +2,12 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.25 (current)
+## 0.1.26 (current)
+- Credit lost only counts while farming: watching a drop on kick.com while Pear Drops is idle no longer shows as lost
+- Settings › Search box: turn the search box or its Recent off, and see, remove and clear what it remembers
+- Why isn't this farming? (Developer tools): the farmer's checks for a drop, in order, and the first that failed
+
+## 0.1.25
 - Settings › Developer: Copy diagnostics for a report, the app's errors, its requests to Kick and the player's watch events, and Developer tools with Inspect
 - Ctrl/⌘+K finds and does anything in the app: drops, channels, every button, tab and setting
 
