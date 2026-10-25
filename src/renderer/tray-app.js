@@ -190,6 +190,13 @@ document.addEventListener('click', (event) => {
   const target = event.target.closest('[data-action]');
   if (target) actions[target.dataset.action]?.(target);
 });
+// Ctrl/⌘+K here: the main window, with its search box open.
+document.addEventListener('keydown', (event) => {
+  const mod = navigator.platform.startsWith('Mac') ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  if (!mod || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'k') return;
+  event.preventDefault();
+  window.pd.tray.palette();
+});
 
 async function refresh() {
   state = await window.pd.getState();

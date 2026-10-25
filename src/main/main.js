@@ -19,6 +19,7 @@ const { Connected } = require('./connected');
 const { DailyReward, CLAIM_MODES, kindOf } = require('./daily-reward');
 const { fileKeyStore } = require('@streamorchard/grapevine');
 const { DevLog, diagnostics, playerState, reportLines } = require('./devlog');
+const { isPaletteKey, cleanMemory } = require('./palette');
 
 // Settings › Developer (devlog.js): this side's warnings and errors, the app's pages' and Kick's
 // pages' go in its error log, kept for the next run too. Every request to Kick goes in Requests, and
@@ -199,6 +200,12 @@ function showMain() {
 function showReward() {
   showMain();
   sendTo(mainWindow, 'show-view', 'reward');
+}
+
+/** The window to the front with the search box open (Ctrl/⌘+K in the docked stream, or in the tray popover). */
+function showPalette() {
+  showMain();
+  sendTo(mainWindow, 'palette:open');
 }
 
 function hideToTray() {
@@ -694,6 +701,10 @@ function registerIpc() {
   // An error on the dashboard or the tray popover, for Settings › Developer.
   appIpc.on('dev:log', (e, where, msg) => noteError('page', `${roleOf(e) === 'tray' ? 'tray' : 'dashboard'}${where ? ` ${String(where).slice(0, 200)}` : ''}`, String(msg ?? '').slice(0, 2000)));
   mainIpc.handle('auth:login', () => openLogin());
+  // The search box's memory of what was run (Recent, and how often), and its Quit Pear Drops.
+  mainIpc.handle('palette:get', () => cleanMemory(db.get('palette', {})));
+  mainIpc.handle('palette:save', (_e, m) => db.set('palette', cleanMemory(m)));
+  mainIpc.handle('app:quit', () => app.quit());
   mainIpc.handle('history:view', (_e, opts = {}) => {
     const campaignId = typeof opts.campaignId === 'string' ? opts.campaignId : null;
     const view = history.view({
@@ -999,6 +1010,13 @@ app.whenReady().then(async () => {
     if (contents.session === kickSession || HIDDEN) contents.setAudioMuted(true);
     guardContents(contents, { isApp });
     if (contents.session === kickSession) noteKickPage(contents);
+    // The docked stream and chat keep their keys: Ctrl/⌘+K there opens the search box all the same.
+    if (contents.getType() === 'webview')
+      contents.on('before-input-event', (event, input) => {
+        if (!isPaletteKey(input)) return;
+        event.preventDefault();
+        showPalette();
+      });
   });
 
   store = new Store();
@@ -1127,6 +1145,7 @@ app.whenReady().then(async () => {
     ipc: trayIpc,
     preload: path.join(__dirname, '..', 'preload', 'app.js'),
     onShowMain: showMain,
+    onPalette: showPalette,
     onQuit: () => app.quit(),
     onAction: (name) => {
       if (name === 'pause') farmer.setPaused(true);

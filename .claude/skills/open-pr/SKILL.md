@@ -14,6 +14,7 @@ It must not be `main`, and the commits must not change the version in `package.j
 - App code changed (`src/`, `scripts/`): run `npm run test:coverage`, then `npm run test:launch`. Launch tests are always hidden and muted, so the developer can keep working. Run them in the background with a time limit.
 - Docs, skills or CI only: `npm test` is enough.
 - **Coverage can't go down.** If a file drops below its minimum in `test/coverage-min.json`, add tests for the new code paths. If coverage went up, raise the minimums with `npm run test:coverage -- --update`.
+- **The search box covers everything new.** `npm test` and `npm run test:launch` fail on a button, tab or setting without a command (the `palette-coverage` tests). Don't add it to the left-out list to get past them: give it a command, unless it's a close button or a row of a list.
 - Report failures honestly in the PR: what was run, what wasn't, and the coverage of the files the change touched.
 
 ## 3. Write the draft

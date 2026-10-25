@@ -64,6 +64,7 @@ Pear Drops updates itself: Settings › Updates shows when there's a new version
   - **Copy diagnostics** (or **Save to Downloads**): your version and system, what's farming, the settings, and the lists below, as text for an issue. Your Kick login, cookies and keys are left out, and the account's name never goes in.
   - **Errors** (the last 200, from this run and the one before), **Requests** to Kick with their status (**Errors only** shows those that failed), and the player's **Watch events**, each marked once Kick credits it. A click opens one, with Copy.
   - The **Developer tools** switch (off at first) adds a ⋯ to the stream's header with **Copy player state** and **Inspect** for the stream and Kick's page, and keeps the text of Kick's answers in Requests. The first time, it says that Inspect can read your Kick login. Turning it on or off is recorded in History.
+- **Search and actions** (**Ctrl+K**, **⌘K** on a Mac, or the title bar's search button): one box that finds and does anything in the app, from the keyboard, even with the docked stream focused. Type a drop's name and it comes first, drawn big with its progress, its rewards and its buttons (Show in queue, Farm it now, Skip stream, Switch it off, In History); a channel's name gives Watch for drops, Follow and On kick.com. It also finds every reward, every action (Pause, Refresh from Kick, Back up now, Copy diagnostics…), every tab and filter by name ("Done: Missed", "History: Watch sessions", "Developer: Requests"), and Settings' options: a switch flips right there, a choice is picked with ← →, and "stall 15" sets the stall time. Tab and ⇧Tab step through a drop's or channel's buttons (and the two columns of everything for it, under More…), `>` `@` `%` `#` keep to actions, channels, drops or settings, and what you use most comes first. The same box as Stream Multiview's.
 - **Font** (Settings › App): your computer's own font on macOS and Windows, or Inter, which comes with the app and looks the same everywhere. Linux uses Inter by default.
 
 ## Run from source
@@ -131,6 +132,7 @@ src/main/        Electron main process
   archive.js     saved copies of every drop seen (details, progress, images)
   updates.js     update checks, downloads and installs (updater.js: GitHub, zips, signatures)
   tray.js        menu bar / tray icon and popover
+  palette.js     the search box's side here: Ctrl/⌘+K from the docked stream, and what it remembers
   notifier.js    desktop notifications: which kinds are on, repeats, Send a test
   connected.js   Settings › Connected apps: the Grapevine link with other apps, what Pear Drops tells them
   activity.js    the Activity log: every message each way this run, kept in memory

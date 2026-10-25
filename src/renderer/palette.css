@@ -1,0 +1,719 @@
+/* =========================================================================
+   The search box (Ctrl/⌘+K, palette.js): over everything, the app dimmed
+   and blurred behind it, farming and the stream still running.
+   ========================================================================= */
+.pal-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(4, 5, 7, 0.55);
+  backdrop-filter: blur(6px) saturate(0.8);
+  animation: pal-fade 0.12s var(--ease);
+}
+.pal-bg[hidden] {
+  display: none;
+}
+.pal {
+  position: absolute;
+  left: 50%;
+  top: 92px;
+  width: min(680px, calc(100vw - 24px));
+  max-height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-50%);
+  background: rgba(17, 19, 23, 0.97);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  box-shadow:
+    0 1px 0 var(--highlight) inset,
+    0 30px 80px -20px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  animation: pal-in 0.12s var(--ease);
+}
+.pal.pal-tabbed {
+  width: min(760px, calc(100vw - 24px));
+}
+@keyframes pal-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pal-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pal-bg,
+  .pal {
+    animation: none;
+  }
+}
+
+/* ---- the words box */
+.pal-in {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  flex: none;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+.pal-mag .icon {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+  display: block;
+}
+#pal-q {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--text);
+  font: 17px/1.2 var(--font);
+  caret-color: var(--green);
+}
+#pal-q::placeholder {
+  color: var(--muted);
+}
+.pal-count {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.pal-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 4px 0 10px;
+  border-radius: 8px;
+  background: var(--green-soft);
+  border: 1px solid rgba(83, 252, 24, 0.35);
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.pal-scope[hidden],
+.pal-head[hidden],
+.pal-mag[hidden],
+.pal-esc[hidden],
+.pal-k[hidden] {
+  display: none;
+}
+.pal-scope-x {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.pal-scope-x .icon {
+  width: 11px;
+  height: 11px;
+  opacity: 0.75;
+}
+.pal-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.pal-head .pal-ht {
+  font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pal-back {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.pal-back:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.pal-back .icon {
+  width: 16px;
+  height: 16px;
+}
+.pal-hsep {
+  width: 1px;
+  height: 22px;
+  background: var(--border-2);
+}
+.pal-esc,
+.pal-k {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.pal kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: 600 11px/1 var(--font);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+
+/* ---- the results */
+.pal-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 8px 6px;
+  scrollbar-width: thin;
+}
+.pal-list.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+  align-items: start;
+}
+.pal-g {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 10px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pal-g em {
+  font-style: normal;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 500;
+  font-size: 12px;
+}
+.pal-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.pal-row.on {
+  background: rgba(83, 252, 24, 0.075);
+  border-color: rgba(83, 252, 24, 0.38);
+}
+.pal-row.off {
+  opacity: 0.5;
+}
+.pal-ico {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  color: var(--text-2);
+}
+.pal-row.on .pal-ico {
+  color: var(--green);
+  border-color: rgba(83, 252, 24, 0.35);
+}
+.pal-ico .icon {
+  width: 15px;
+  height: 15px;
+}
+.pal-pic {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  position: relative;
+}
+.pal-pic img {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  display: block;
+  object-fit: cover;
+}
+.pal-pic.round img {
+  border-radius: 50%;
+}
+.pal-pic-live {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--red);
+  border: 2px solid var(--solid);
+}
+.pal-txt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pal-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.pal-t {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pal mark {
+  background: none;
+  color: var(--green);
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.pal-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pal-sub b {
+  color: var(--text);
+  font-weight: 650;
+}
+.pal-dot {
+  font-style: normal;
+  margin: 0 5px;
+}
+.pal-live {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  margin-right: 6px;
+  border-radius: 4px;
+  background: var(--red);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
+  flex: none;
+}
+.pal-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 650;
+  border: 1px solid var(--border-2);
+  color: var(--text-2);
+  white-space: nowrap;
+  flex: none;
+}
+.pal-pill .live-dot {
+  width: 6px;
+  height: 6px;
+}
+.pal-pill.green {
+  color: var(--green);
+  border-color: rgba(83, 252, 24, 0.35);
+  background: var(--green-soft);
+}
+.pal-pill.gold {
+  color: var(--gold);
+  border-color: rgba(255, 211, 106, 0.35);
+  background: rgba(255, 211, 106, 0.1);
+}
+.pal-pill.amber {
+  color: var(--amber);
+  border-color: rgba(251, 191, 75, 0.35);
+  background: rgba(251, 191, 75, 0.1);
+}
+.pal-pill.red {
+  color: var(--red);
+  border-color: rgba(255, 93, 110, 0.35);
+  background: rgba(255, 93, 110, 0.1);
+}
+.pal-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.pal-views {
+  font-weight: 650;
+  color: var(--text);
+}
+.pal-now,
+.pal-why-row {
+  color: var(--muted);
+}
+.pal-keys {
+  display: inline-flex;
+  gap: 3px;
+}
+.pal-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  opacity: 0;
+}
+.pal-go.on {
+  opacity: 1;
+  color: var(--text-2);
+}
+.pal-sw {
+  pointer-events: none;
+  transform: scale(0.9);
+}
+.pal-seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.pal-seg i {
+  font-style: normal;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.pal-seg i.on {
+  background: var(--surface-3);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border-2) inset;
+}
+.pal-seg i.pick {
+  outline: 1.5px solid var(--green);
+  color: var(--green);
+}
+
+/* ---- the big row: a drop or channel named in full */
+.pal-row.pal-hero {
+  align-items: flex-start;
+  gap: 14px;
+  margin: 4px 2px 2px;
+  padding: 14px;
+  border-radius: 14px;
+  border-color: rgba(83, 252, 24, 0.42);
+  background: linear-gradient(180deg, rgba(83, 252, 24, 0.075), rgba(83, 252, 24, 0.03));
+  box-shadow: 0 0 0 3px rgba(83, 252, 24, 0.06);
+  cursor: default;
+}
+.pal-pic.big,
+.pal-ico.big {
+  width: 64px;
+  height: 64px;
+}
+.pal-pic.big img {
+  border-radius: 12px;
+}
+.pal-pic.big.round img {
+  border-radius: 50%;
+}
+.pal-pic.sm {
+  width: 26px;
+  height: 26px;
+}
+.pal-pic.sm img {
+  border-radius: 7px;
+}
+.pal-row.pal-hero .pal-t {
+  font: 700 19px/1.25 var(--font-display);
+}
+.pal-row.pal-hero .pal-sub {
+  margin-top: 4px;
+  font-size: 12.5px;
+  white-space: normal;
+}
+.pal-track {
+  position: relative;
+  height: 22px;
+  margin-top: 10px;
+}
+.pal-track .bar,
+.pal-track .fill {
+  position: absolute;
+  left: 0;
+  top: 9px;
+  height: 4px;
+  border-radius: 4px;
+}
+.pal-track .bar {
+  right: 0;
+  background: var(--surface-3);
+}
+.pal-track .fill {
+  background: var(--green);
+  box-shadow: 0 0 10px var(--green-glow);
+}
+.pal-track .mk {
+  position: absolute;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  border-radius: 6px;
+  background: var(--solid-2);
+  border: 1.5px solid var(--border-2);
+  padding: 2px;
+}
+.pal-track .mk.claimed {
+  border-color: var(--green);
+}
+.pal-track .mk.lit {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(255, 211, 106, 0.2);
+}
+.pal-track .mk img {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  display: block;
+}
+.pal-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.pal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 10px 0 11px;
+  border-radius: 9px;
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 13px var(--font);
+  cursor: pointer;
+}
+.pal-btn .icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-2);
+}
+.pal-btn.act {
+  color: var(--green);
+  border-color: rgba(83, 252, 24, 0.45);
+}
+.pal-btn.act .icon {
+  color: var(--green);
+}
+.pal-btn.on {
+  background: var(--green);
+  color: #07140a;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(83, 252, 24, 0.18);
+}
+.pal-btn.on .icon {
+  color: #07140a;
+}
+.pal-btn.on kbd {
+  background: rgba(0, 0, 0, 0.12);
+  border-color: rgba(0, 0, 0, 0.25);
+  color: #07140a;
+}
+
+/* ---- nothing found, the footer, the flash */
+.pal-none {
+  text-align: center;
+  padding: 26px 0 16px;
+}
+.pal-none b {
+  display: block;
+  font-size: 16px;
+  color: var(--text);
+}
+.pal-none span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.pal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+.pal-keyhelp,
+.pal-fks {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.pal-fk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.pal-why {
+  color: var(--amber);
+}
+.pal-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.pal-flash {
+  position: fixed;
+  z-index: 100;
+  left: 50%;
+  top: 74px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  transform: translateX(-50%);
+  border-radius: 12px;
+  background: rgba(22, 25, 30, 0.97);
+  border: 1px solid var(--border-2);
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.7);
+  font-size: 13.5px;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.pal-flash.out {
+  opacity: 0;
+}
+.pal-flash kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: 600 11px/1 var(--font);
+}
+.pal-flash .muted {
+  color: var(--muted);
+}
+
+/* ---- the title bar's button */
+.tb-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 8px 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.tb-search:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.tb-search .icon {
+  width: 16px;
+  height: 16px;
+}
+.tb-search kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: 600 11px/1 var(--font);
+}
+.tb-search.tight {
+  padding: 0 9px;
+}
+.tb-search.tight kbd {
+  display: none;
+}
+
+/* ---- Settings: the row the box opened it on, lit for a moment */
+.setting.lit {
+  animation: pal-lit 1.6s var(--ease);
+  border-radius: 10px;
+}
+@keyframes pal-lit {
+  0%,
+  60% {
+    background: rgba(83, 252, 24, 0.09);
+    box-shadow: 0 0 0 1px rgba(83, 252, 24, 0.4);
+  }
+}
+
+/* ---- small windows */
+@media (max-width: 900px) {
+  .pal-hide-narrow {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .pal-pre {
+    display: none;
+  }
+  .pal-list.split {
+    grid-template-columns: 1fr;
+  }
+}
