@@ -447,10 +447,6 @@ class Watcher extends EventEmitter {
     this.view.setBounds({ x, y, width, height: playerHeight });
     if (this.showChat) this.chatView?.setBounds({ x, y: y + playerHeight, width, height: Math.max(0, height - playerHeight) });
   }
-
-  openDevTools() {
-    this.view?.webContents.openDevTools({ mode: 'detach' });
-  }
 }
 
 module.exports = { Watcher, URLS, samePage, streamChannel, playerOffline, isPlayer, realtimeHint };

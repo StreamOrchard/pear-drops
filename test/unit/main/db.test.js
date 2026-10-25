@@ -11,6 +11,7 @@ test('a new database gets the current schema, and opening it again changes nothi
   const dir = tmp();
   const db = openDb(dir);
   assert.equal(db.sql.prepare('PRAGMA user_version').get().user_version, 1);
+  assert.equal(db.version, 1, 'what Copy diagnostics says');
   assert.equal(db.sql.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
   db.set('k', { a: 1 });
   db.close();

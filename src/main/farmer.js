@@ -510,6 +510,7 @@ class Farmer extends EventEmitter {
           this.lastAlertAt = null;
           this.eventsSinceCredit = 0;
           this.addLog('credit', `+${delta} min on ${p.name} (${value} total)`);
+          this.emit('credited', { slug: this.current.slug, delta });
         }
       }
       this.prevUnits.set(p.id, value);

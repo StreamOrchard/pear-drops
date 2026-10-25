@@ -324,6 +324,29 @@ const EVENT_TABLE = [
 
 // ------------------------------------------------------------------ fake API
 
+// The address Kick's real API (kick-api.js) asks for each call, so Settings › Developer's Requests
+// read the same in demo mode.
+const WEB = 'https://web.kick.com/api/v1';
+const STAND_IN_REQUESTS = {
+  me: () => ['GET', 'https://kick.com/api/v1/user'],
+  myEmotes: () => ['GET', 'https://kick.com/emotes'],
+  followedSlugs: () => ['GET', 'https://kick.com/api/v2/channels/followed-page'],
+  follow: (slug) => ['POST', `https://kick.com/api/v2/channels/${slug}/follow`],
+  unfollow: (slug) => ['DELETE', `https://kick.com/api/v2/channels/${slug}/follow`],
+  campaigns: () => ['GET', `${WEB}/drops/campaigns`],
+  progress: () => ['GET', `${WEB}/drops/progress`],
+  campaignsForLivestream: (channelId, categoryId) => ['GET', `${WEB}/drops/campaigns/livestream?channel_id=${channelId}&category_id=${categoryId}`],
+  claim: () => ['POST', `${WEB}/drops/claim`],
+  dailyChallenges: () => ['GET', `${WEB}/gamification/challenges`],
+  collectibles: () => ['GET', `${WEB}/gamification/collectibles`],
+  level: () => ['GET', `${WEB}/gamification/user/level`],
+  streak: () => ['GET', `${WEB}/gamification/users/4242/streak`],
+  rewards: () => ['GET', `${WEB}/rewards`],
+  claimDaily: (id) => ['POST', `${WEB}/gamification/challenges/${id}/claim`],
+  livestreams: (categoryId) => ['GET', `${WEB}/livestreams?category_id=${categoryId}`],
+  channelInfo: (slug) => ['GET', `https://kick.com/api/v2/channels/${slug}/info`],
+};
+
 class DemoApi {
   constructor() {
     this.loggedIn = !!process.env.PD_DEMO_SIGNED_IN;
@@ -348,6 +371,42 @@ class DemoApi {
     this.levelData = { level: 42, progress_xp: 340, xp_to_next_level: 260 };
     this.streakDays = 12;
     this.nextWinner = null; // a test or the trailer can pick the card the next claim wins
+    // Settings › Developer, as kick-api.js has them: told of every request, with its answer while
+    // Developer tools are on. A test can fail the next call of a method (failNext).
+    this.onRequest = null;
+    this.keepAnswers = false;
+    this.failing = new Map(); // method -> status (0: no answer)
+    for (const [name, address] of Object.entries(STAND_IN_REQUESTS)) {
+      const call = this[name].bind(this);
+      this[name] = async (...args) => {
+        const [method, url] = address(...args);
+        const started = Date.now();
+        const note = (status, answer, error) => {
+          try {
+            this.onRequest?.({ url, method, status, ms: Date.now() - started, body: this.keepAnswers && status ? JSON.stringify(answer ?? null) : undefined, error });
+          } catch {}
+        };
+        if (this.failing.has(name)) {
+          const status = this.failing.get(name);
+          this.failing.delete(name);
+          note(status, { message: 'Stand-in failure' }, status ? null : 'TypeError: Failed to fetch');
+          throw Object.assign(new Error(`HTTP ${status} for ${url}`), { status, body: { message: 'Stand-in failure' } });
+        }
+        try {
+          const answer = await call(...args);
+          note(200, answer);
+          return answer;
+        } catch (err) {
+          note(err.status ?? 0, err.body ?? { message: err.message }, err.status ? null : err.message);
+          throw err;
+        }
+      };
+    }
+  }
+
+  /** The next call of `method` fails with `status` (0: no answer), as Kick's would. */
+  failNext(method, status = 500) {
+    this.failing.set(method, Number(status) || 0);
   }
 
   async hasLogin() {

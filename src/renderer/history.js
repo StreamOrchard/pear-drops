@@ -57,6 +57,8 @@ const EVENT_KIND = {
   'link-disconnected': ['Unlinked', 'link', 'muted'],
   'link-unpaired': ['Unpaired', 'link', 'amber'],
   'link-allowed': ['Allowed', 'link', 'green'],
+  // Settings › Developer: what can read the Kick login changed.
+  'developer-tools': ['Developer tools', 'code', 'muted'],
 };
 
 const hist = {

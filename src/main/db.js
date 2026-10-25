@@ -126,6 +126,11 @@ class Db {
     }
   }
 
+  /** The schema's version (its step in MIGRATIONS), for Copy diagnostics. */
+  get version() {
+    return this.sql.prepare('PRAGMA user_version').get().user_version;
+  }
+
   /** A prepared statement, made once. */
   q(text) {
     if (!this.statements.has(text)) this.statements.set(text, this.sql.prepare(text));
