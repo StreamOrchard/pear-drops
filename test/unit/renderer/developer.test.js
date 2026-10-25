@@ -64,7 +64,7 @@ test('the rows: an error from the last run is dimmed, a bad answer is red, an un
   const failed = run('devRow(e)', { e: { n: 2, t: T, what: 'Your account', method: 'GET', url: 'u', status: 0, ms: 0, error: 'offline' } });
   assert.match(failed, />failed</);
   assert.match(failed, /No answer: offline/);
-  assert.match(run('devRow(e)', { e: { n: 2, t: T, what: 'X', method: 'GET', url: 'u', status: 200, ms: 1, body: '{"a":1}' } }), /<pre class="dev-full dev-answer">\{&quot;a&quot;:1\}<\/pre>/);
+  assert.match(run('devRow(e)', { e: { n: 2, t: T, what: 'X', method: 'GET', url: 'u', status: 200, ms: 1, body: '{"a":1}' } }), /<pre class="dev-full dev-answer">\{\n {2}&quot;a&quot;: 1\n\}<\/pre>/);
   assert.match(run('devRow(e)', { e: { n: 3, t: T, what: 'X', method: 'GET', url: 'u', status: 0, ms: 1 } }), /no answer/);
   run('dev.list = "watch"; dev.open = 4; dev.copied = 4');
   const watch = run('devRow(e)', { e: { n: 4, t: T, slug: 'arcadia', channelId: 9, credited: false, gap: 120_000 } });

@@ -66,21 +66,23 @@ function fitDeveloper() {
 /** Why a request has no answer's text: the switch is off, or was when it was made. */
 const devNoAnswer = () => (dev.data?.answers ? 'Asked before Developer tools were on, so its answer wasn’t kept.' : 'The answer’s text is only kept while Developer tools are on.');
 
+/** An answer laid out to read: JSON indented, anything else as it came. */
+const devTidy = (text) => {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
+  }
+};
+
 /** One entry as text, for Copy. */
 function devEntryText(list, e) {
   if (list === 'errors') return `${new Date(e.t).toLocaleString()} · ${DEV_SOURCES[e.src] ?? e.src}${e.where ? ` · ${e.where}` : ''}${e.count > 1 ? ` · ×${e.count}` : ''}${e.before ? ' · last run' : ''}\n${e.msg}`;
   if (list === 'watch') return `${new Date(e.t).toLocaleString()} · ${e.slug ?? '?'} · ${e.credited ? 'credited' : 'not credited yet'}${e.gap != null ? ` · ${Math.round(e.gap / 1000)} s after the one before` : ''}`;
-  const tidy = (t) => {
-    try {
-      return JSON.stringify(JSON.parse(t), null, 2);
-    } catch {
-      return t;
-    }
-  };
   return [
     `${e.method} ${e.url}`,
     `→ ${e.status || (e.error ? `failed: ${e.error}` : 'no answer')} · ${e.ms} ms · ${new Date(e.t).toLocaleString()} · ${e.what}`,
-    e.body != null ? `\nAnswer:\n${tidy(e.body)}` : `\n(${devNoAnswer()})`,
+    e.body != null ? `\nAnswer:\n${devTidy(e.body)}` : `\n(${devNoAnswer()})`,
   ].join('\n');
 }
 
@@ -103,7 +105,7 @@ function devRow(e) {
       <span class="act-body"><span class="act-title"><span class="act-method cap-drops">${esc(e.what)}</span><span class="act-kind">${esc(e.method)}</span></span>
         <span class="act-text">${esc(e.url)}</span></span>
       <span class="act-meta"><span class="dev-status ${bad ? 'bad' : 'ok'}">${e.status || (e.error ? 'failed' : 'no answer')}</span><span>${e.ms} ms</span></span></button>`;
-    full = e.body != null ? `<pre class="dev-full dev-answer">${esc(e.body.slice(0, 600))}</pre>` : `<p class="dev-full dev-quiet">${esc(e.error ? `No answer: ${e.error}` : devNoAnswer())}</p>`;
+    full = e.body != null ? `<pre class="dev-full dev-answer">${esc(devTidy(e.body).slice(0, 1200))}</pre>` : `<p class="dev-full dev-quiet">${esc(e.error ? `No answer: ${e.error}` : devNoAnswer())}</p>`;
   } else {
     head = `<button class="act-row dev-row ${e.credited ? 'out' : 'dev-waiting'} ${isOpen ? 'open' : ''}" data-action="dev-toggle-row" data-n="${e.n}">
       ${time}<span class="act-dir">${icon('bolt')}</span>

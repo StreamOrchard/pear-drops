@@ -6443,6 +6443,12 @@ button.act-row:hover,
   white-space: pre-wrap;
   word-break: break-word;
 }
+.dev-full.dev-answer {
+  max-height: 120px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.45;
+}
 .dev-full.dev-quiet {
   color: var(--muted);
   font-family: var(--font);
