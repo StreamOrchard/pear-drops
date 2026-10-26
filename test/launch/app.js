@@ -17,12 +17,15 @@ function playwright() {
 /**
  * options: signedIn (skip the welcome screen), seed (believable history),
  * eventSeconds (stand-in player's watch event interval), hidden, settings.
+ * The daily reward is claimed by hand unless settings say otherwise: the default claims a ready
+ * crate 15 minutes before midnight UTC, which a run then would do mid-test. test/unit/main/daily-reward.test.js
+ * holds the default.
  */
 const SETTLE_MS = 500;
 
 async function launchApp({ signedIn = true, seed = true, eventSeconds = 120, hidden = !process.env.PD_TEST_VISIBLE, mirror = false, settings, files = {}, env: extraEnv = {}, scale, size = { width: 1480, height: 940 } } = {}) {
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'pd-test-'));
-  if (settings) fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify(settings));
+  fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify({ dailyClaim: 'self', ...settings }));
   // Other files to start with in the data folder, e.g. { 'updates.json': {...} } or { 'backups/x.db': buffer }.
   for (const [name, content] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(data, name)), { recursive: true });

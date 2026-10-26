@@ -379,7 +379,9 @@ test('the tray: an event’s crate waiting makes its chest hop; its tab opens, a
 test('the claim setting is in Settings › Farming, and the two notification kinds are there', async () => {
   await a.win.click('button.icon-only[data-action="settings"]');
   await until(a.win, () => document.querySelector('[data-key="dailyClaim"]'), 'the setting');
-  assert.match(await a.win.textContent('[data-key="dailyClaim"].active'), /Before it resets/);
+  assert.match(await a.win.textContent('[data-key="dailyClaim"].active'), /Myself/, 'as launchApp sets it');
+  await a.win.click('[data-key="dailyClaim"][data-id="before-reset"]');
+  await until(a.win, () => state.settings.dailyClaim === 'before-reset', 'saved');
   await a.win.click('[data-key="dailyClaim"][data-id="self"]');
   await until(a.win, () => state.settings.dailyClaim === 'self', 'saved');
   await a.win.click('[data-action="settings-tab"][data-id="notifications"]');
