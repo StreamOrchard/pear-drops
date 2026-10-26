@@ -165,6 +165,17 @@ test('a drop named in full is a big row; a reward’s name brings its drop, with
   assert.deepEqual(runs(() => ready.run()), [['claim', { campaign: 'c-chat', reward: 'r4' }]]);
 });
 
+test('a done drop still running lists each reward once, from the current drop, and an ended one from Done', () => {
+  const chat = farm.categories[1].campaigns[0];
+  chat.complete = true;
+  chat.rewards[0] = { ...chat.rewards[0], ready: false, claimed: true };
+  farm.past.push({ id: 'c-chat', name: chat.name, status: 'completed', category: 'Just Chatting', image: '', units: 30, rewards: chat.rewards });
+  const rows = commands.all().filter((x) => x.group === 'Rewards' && x.title === 'Chat Bubble Badge');
+  assert.deepEqual(plain(rows.map((x) => x.id)), ['reward:r4']);
+  assert.equal(plain(rows[0].chip).text, 'Claimed');
+  assert.ok(find('reward:past:c-old:r9'), 'the ended drop’s reward');
+});
+
 test('channels: the one being watched, and the others live for a drop, each with its buttons', () => {
   const cur = find('ch:arcadia');
   assert.equal(cur.group, 'Watching');

@@ -192,7 +192,9 @@ function rewardItems(f) {
       }
     }
   }
-  for (const p of f.past ?? []) {
+  // A done drop still running is in both lists: its row above has the minutes and the chip.
+  const current = new Set(f.categories.flatMap((cat) => cat.campaigns.map((c) => c.id)));
+  for (const p of (f.past ?? []).filter((x) => !current.has(x.id))) {
     for (const r of (p.rewards ?? []).filter((x) => x.tracked)) {
       out.push({ id: `reward:past:${p.id}:${r.id}`, kind: 'reward', group: 'Rewards', title: r.name, image: r.image, sub: [p.name, r.claimed ? 'claimed' : 'missed'], heroOf: () => pastItem(p), run: () => openSide('done') });
     }
