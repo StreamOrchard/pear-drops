@@ -197,6 +197,9 @@ test('what was run is remembered in the database, and listed in the empty box as
 
 test('the title bar’s button opens it, with its keys shown (just the icon when the title bar is tight)', async () => {
   assert.match(await a.win.textContent('.tb-search kbd'), /⌘K|Ctrl K/);
+  // The title bar drags the window, so a button in it that doesn't opt out never gets a real click (Playwright's clicks skip that).
+  const dragging = await a.win.evaluate(() => [...document.querySelectorAll('.titlebar button')].filter((b) => getComputedStyle(b).webkitAppRegion !== 'no-drag').map((b) => b.className));
+  assert.deepEqual(dragging, [], 'title bar buttons that drag the window');
   await a.win.click('.tb-search');
   await until(a.win, () => palette.isOpen(), 'open from the button');
   await closeBox();
