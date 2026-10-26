@@ -125,6 +125,12 @@ test('a switch flips where it is; a choice is picked with ← →; a slider is s
 
   await typeIn('claim kick’s daily rewards');
   assert.equal((await rows())[0].id, 'set:dailyClaim');
+  // launchApp starts on Myself.
+  await a.win.keyboard.press('ArrowRight');
+  assert.match(await a.win.textContent('.pal-row.on .pal-seg i.pick'), /Before it resets/);
+  await a.win.keyboard.press('Enter');
+  await until(a.win, () => state.settings.dailyClaim === 'before-reset', 'Before it resets set');
+  await typeIn('claim kick’s daily rewards');
   await a.win.keyboard.press('ArrowLeft');
   assert.match(await a.win.textContent('.pal-row.on .pal-seg i.pick'), /Myself/);
   await a.win.keyboard.press('Enter');

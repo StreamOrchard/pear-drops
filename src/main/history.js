@@ -8,6 +8,12 @@ const KEEP_DAYS = 400;
 // (credits come about every 2 minutes).
 const CUT_GRACE_MS = 5 * 60_000;
 const HOUR = 3_600_000;
+// The start of t's hour on the clock. Counted back from t rather than set with setMinutes, which in the
+// hour a clock goes back can land on the other time round.
+const hourOf = (t) => {
+  const d = new Date(t);
+  return t - (d.getMinutes() * 60_000 + d.getSeconds() * 1000 + d.getMilliseconds());
+};
 // Shorter than this (the history so far, or the range picked), the activity chart is by hour.
 const HOURLY_SPAN = 3 * 86_400_000;
 // The History view's range is kept in memory between its refreshes, and let go once it's closed.
@@ -246,9 +252,10 @@ class History {
   daily(events, sessions, since, now) {
     const start = new Date(Math.max(since || 0, now - 60 * DAY, this.firstAt() ?? now));
     start.setHours(0, 0, 0, 0);
+    // A day on the clock at a time: the one a clock changes on is 23 or 25 hours.
     const days = [];
-    for (let d = start.getTime(); d <= now; d += DAY) days.push({ day: d, credited: 0, watched: 0, claims: 0 });
-    const slot = (t) => days[Math.floor((t - start.getTime()) / DAY)];
+    for (const d = start; d.getTime() <= now; d.setDate(d.getDate() + 1)) days.push({ day: d.getTime(), credited: 0, watched: 0, claims: 0 });
+    const slot = (t) => days.findLast((d) => d.day <= t);
     for (const e of events) {
       const s = slot(e.t);
       if (!s) continue;
@@ -279,24 +286,21 @@ class History {
     const first = this.firstAt() ?? now;
     const from = Math.max(since || 0, first, now - HOURLY_SPAN);
     if (now - Math.max(since || 0, first) > HOURLY_SPAN) return { unit: 'day', bars: this.daily(events, sessions, since, now) };
-    const start = new Date(from);
-    start.setMinutes(0, 0, 0);
+    const start = hourOf(from);
     const bars = [];
-    for (let t = start.getTime(); t <= now; t += HOUR) bars.push({ t, credited: 0, watched: 0, claims: 0 });
-    const slot = (t) => bars[Math.floor((t - start.getTime()) / HOUR)];
+    for (let t = start; t <= now; t += HOUR) bars.push({ t, credited: 0, watched: 0, claims: 0 });
+    const slot = (t) => bars[Math.floor((t - start) / HOUR)];
     for (const e of events) {
-      const b = e.t >= start.getTime() && slot(e.t);
+      const b = e.t >= start && slot(e.t);
       if (!b) continue;
       if (e.type === 'credit') b.credited += e.delta ?? 0;
       if (e.type === 'claim') b.claims += 1;
     }
     for (const sess of sessions) {
-      let t = Math.max(sess.start, start.getTime());
+      let t = Math.max(sess.start, start);
       const end = sess.end ?? now;
       while (t < end) {
-        const next = new Date(t);
-        next.setMinutes(60, 0, 0);
-        const part = Math.min(end, next.getTime()) - t;
+        const part = Math.min(end, hourOf(t) + HOUR) - t;
         const b = slot(t);
         if (b) b.watched += part / 60_000;
         t += part;
@@ -312,9 +316,7 @@ class History {
       let t = s.start;
       const end = s.end ?? Date.now();
       while (t < end) {
-        const next = new Date(t);
-        next.setMinutes(60, 0, 0);
-        const part = Math.min(end, next.getTime()) - t;
+        const part = Math.min(end, hourOf(t) + HOUR) - t;
         hours[new Date(t).getHours()] += part / 60_000;
         t += part;
       }
