@@ -42,6 +42,7 @@ An Electron app that farms Kick emote and badge drops. `src/main/` is the Electr
   - the list of apps that can link
 - **What goes where:**
   - **Changing what's sent** (a new field, event or method) starts in Grapevine (its `change-capability` skill), then a Grapevine release, then `npm install @streamorchard/grapevine@^<version>` here. Never edit `node_modules`, and never send fields the schema doesn't have.
+  - **Something Grapevine's library can't do** (its key store, the link, its helpers) is fixed in Grapevine too: a change and a release there, then the bump here. Don't work around it with a copy in this app; Stream Multiview will need the same.
   - **A new app** is added in Grapevine's known-apps list. The cards here come from it, so it needs no code here.
   - **A new capability Pear Drops provides or uses** needs its line in `CAPABILITIES` in `src/renderer/app.js`: an icon, a few words, and the whole sentence for its tooltip. The card lists the capabilities by direction, one line each. A capability without wording still gets a plain line with its name.
 - **Activity** (a card's Activity button): `activity.js` keeps every message Grapevine reports (its `message` event) and what `connected.js` notices, in memory, for this run. `src/renderer/activity.js` says each in plain words: a new method or event of a capability needs its words in `describeActivity` there.

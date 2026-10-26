@@ -1118,7 +1118,10 @@ app.whenReady().then(async () => {
   const crypt = (await safeStorage.isAsyncEncryptionAvailable())
     ? {
         encrypt: async (t) => (await safeStorage.encryptStringAsync(t)).toString('base64'),
-        decrypt: async (t) => (await safeStorage.decryptStringAsync(Buffer.from(t, 'base64'))).result,
+        decrypt: async (t) => {
+          const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(t, 'base64'));
+          return { text: result, reEncrypt: shouldReEncrypt }; // saved again with the system's new key
+        },
       }
     : {};
   connected = new Connected({
