@@ -664,8 +664,20 @@ function setupDemo() {
       await watcher.view?.webContents.executeJavaScript(`location.href = 'https://player.kick.com/${to}'`).catch(() => {});
       return slug;
     },
-    /** The player's picture freezes (or moves again). */
-    freeze: (on = true) => watcher.view?.webContents.executeJavaScript(`window.__demoFreeze && window.__demoFreeze(${!!on})`).catch(() => {}),
+    /**
+     * The player's picture freezes (or moves again). The page stops drawing, and its video's time
+     * stops for watch.js too: that runs in its own world (999), and a drawn stream's time runs on
+     * with the clock (Chromium 156) whether a new picture comes or not.
+     */
+    freeze: async (on = true) => {
+      const wc = watcher.view?.webContents;
+      if (!wc) return;
+      const pin = on
+        ? "for (const v of document.querySelectorAll('video')) { const at = v.currentTime; Object.defineProperty(v, 'currentTime', { configurable: true, get: () => at }); }"
+        : "for (const v of document.querySelectorAll('video')) delete v.currentTime;";
+      await wc.executeJavaScript(`window.__demoFreeze && window.__demoFreeze(${!!on})`).catch(() => {});
+      await wc.executeJavaScriptInIsolatedWorld(999, [{ code: pin }]).catch(() => {});
+    },
     /** Take a stand-in channel offline (or back online) and re-check. */
     offline: async (slug, on = true) => {
       on ? demo.api.offline.add(slug) : demo.api.offline.delete(slug);
@@ -1103,8 +1115,11 @@ app.whenReady().then(async () => {
   // they never see (or pair with) the apps you really use; GRAPEVINE_DIR still wins, to try one
   // with a developer copy of Stream Multiview.
   linkDir = env('GRAPEVINE_DIR') || (DEMO || env('PD_DEV_DATA') ? path.join(app.getPath('userData'), 'grapevine') : null);
-  const crypt = safeStorage.isEncryptionAvailable()
-    ? { encrypt: (t) => safeStorage.encryptString(t).toString('base64'), decrypt: (t) => safeStorage.decryptString(Buffer.from(t, 'base64')) }
+  const crypt = (await safeStorage.isAsyncEncryptionAvailable())
+    ? {
+        encrypt: async (t) => (await safeStorage.encryptStringAsync(t)).toString('base64'),
+        decrypt: async (t) => (await safeStorage.decryptStringAsync(Buffer.from(t, 'base64'))).result,
+      }
     : {};
   connected = new Connected({
     store,
