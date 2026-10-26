@@ -653,6 +653,7 @@
 
 /* ---- the title bar's button */
 .tb-search {
+  -webkit-app-region: no-drag;
   display: inline-flex;
   align-items: center;
   gap: 7px;
