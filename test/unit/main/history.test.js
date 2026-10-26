@@ -111,6 +111,49 @@ test('the activity chart is by hour on a first day or the last 24 hours, and by 
   assert.equal(day.activity.bars.length, 25, 'the last 24 hours, by the hour');
 });
 
+// In London, where the clocks went back an hour at 2am on Sunday 25 October 2026: 1am came round twice.
+function inLondon(fn) {
+  const tz = process.env.TZ;
+  process.env.TZ = 'Europe/London';
+  try {
+    fn();
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+}
+
+test('the hourly chart counts the hour the clocks went back twice, an hour a bar', () =>
+  inLondon(() => {
+    const { history } = fresh();
+    // 1:30am the second time round, a day on: 24 hours back is 1:30am the second time round too.
+    const now = Date.parse('2026-10-26T01:30:00Z');
+    history.add('start', { t: now - 2 * 86_400_000 });
+    session(history, { start: Date.parse('2026-10-25T00:30:00Z'), minutes: 120, credits: 0 }); // 1:30am the first time round to 2:30am
+    const { bars, unit } = history.view({ now, since: now - 86_400_000 }).activity;
+    assert.equal(unit, 'hour');
+    assert.equal(bars.length, 25, 'the last 24 hours, by the hour');
+    assert.ok(bars.every((b, i) => !i || b.t - bars[i - 1].t === 3600_000), 'an hour apart');
+    assert.equal(bars[0].t, Date.parse('2026-10-25T01:00:00Z'), '1am the second time round, not the first');
+    // From midnight: half the first 1am, all of the second, and half of 2am, each in its own bar.
+    const fromMidnight = history.view({ now, since: Date.parse('2026-10-25T00:00:00Z') }).activity.bars;
+    const watched = Object.fromEntries(fromMidnight.filter((b) => b.watched).map((b) => [new Date(b.t).toISOString().slice(11, 16), b.watched]));
+    assert.deepEqual(watched, { '00:00': 30, '01:00': 60, '02:00': 30 });
+  }));
+
+test('the daily chart starts each day at midnight, after the clocks change too', () =>
+  inLondon(() => {
+    const { history } = fresh();
+    const now = Date.parse('2026-10-28T12:00:00Z');
+    history.add('start', { t: Date.parse('2026-10-20T09:00:00Z') });
+    history.add('claim', { t: Date.parse('2026-10-26T23:30:00Z'), session: 'a', campaignId: 'c1', reward: 'Hype Emote' }); // 11:30pm Monday
+    const { bars, unit } = history.view({ now }).activity;
+    assert.equal(unit, 'day');
+    assert.equal(bars.length, 9, '20 to 28 October');
+    assert.ok(bars.every((b) => new Date(b.day).getHours() === 0 && new Date(b.day).getMinutes() === 0), 'each at midnight');
+    assert.equal(new Date(bars.find((b) => b.claims).day).getDate(), 26, 'late Monday is Monday');
+  }));
+
 test('view(): credit elsewhere while nothing was farmed is no loss, and is left out', () => {
   const { history } = fresh();
   const now = Date.now();
