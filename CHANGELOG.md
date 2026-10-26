@@ -2,7 +2,10 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.27 (current)
+## 0.1.28 (current)
+- A drop image that's still downloading isn't fetched again and rewritten, which could leave it showing as missing for 5 minutes
+
+## 0.1.27
 - Opening a row at the bottom of Settings › Developer's lists or a connected app's Activity keeps it open, instead of the list flickering and the row disappearing
 
 ## 0.1.26
