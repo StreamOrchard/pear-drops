@@ -2,7 +2,11 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.28 (current)
+## 0.1.29 (current)
+- The Search button in the title bar opens the search box when clicked again
+- The search box lists each reward of a finished drop once, not twice
+
+## 0.1.28
 - A drop image that's still downloading isn't fetched again and rewritten, which could leave it showing as missing for 5 minutes
 
 ## 0.1.27
