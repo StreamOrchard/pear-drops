@@ -14,12 +14,15 @@ const stats = (a) => a.app.evaluate(() => {
 test('a quick restart keeps the stat cards counting and the stream it was watching', async () => {
   const first = await launchApp({ seed: false, eventSeconds: 2 });
   await first.farming();
-  await first.app.evaluate(async () => {
+  // The stand-in's player sends one 2 s after it loads, but a busy CI runner can be slow to load it.
+  const waited = await first.app.evaluate(async () => {
     const { farmer } = global.pdDebug;
-    for (let i = 0; i < 60 && !farmer.stats.eventsSent; i++) await new Promise((r) => setTimeout(r, 250));
+    for (let i = 0; i < 120 && !farmer.stats.eventsSent; i++) await new Promise((r) => setTimeout(r, 250));
+    const ws = farmer.watcher.status;
+    return { loaded: ws.loadedAt ? `${Date.now() - ws.loadedAt} ms ago` : 'never', video: ws.video, log: farmer.log.slice(-8).map((e) => e.text) };
   });
   const before = await stats(first);
-  assert.ok(before.eventsSent > 0 && before.slug, 'watching, with a watch event sent');
+  assert.ok(before.eventsSent > 0 && before.slug, `watching, with a watch event sent: ${JSON.stringify(waited)}`);
   await first.app.close(); // quits the app, which saves the run
   // The database (closed as the app quit, so it's all in the one file) and the settings.
   const files = Object.fromEntries([FILE, 'settings.json'].map((f) => [f, fs.readFileSync(path.join(first.data, f))]));
