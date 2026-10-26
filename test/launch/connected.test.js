@@ -2,6 +2,8 @@
 // of the test's own: the card in each state, the credit banner naming it, and History.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { launchApp, until } = require('./app');
 
 const MV = 'com.glowingpear.streammultiview';
@@ -91,6 +93,30 @@ test('switched on: waiting, then it asks to pair, Allow, and connected to Stream
   await until(a.win, () => /signed out while you farm/.test(document.querySelector('.app-foot')?.textContent ?? ''), 'back to the usual line', 15000);
   // A click on its widget brings Pear Drops forward.
   assert.deepEqual(await a.app.evaluate(() => global.pdDemo.multiviewPeer.link.request('com.streamorchard.peardrops', 'drops.farming.show')), { shown: true });
+});
+
+test('the pairing key is kept encrypted with the system keychain, and the next start reads it back', async () => {
+  const kept = () => a.app.evaluate((_e, id) => ({ key: global.pdDebug.connected.link.keys.get(id)?.key, encrypted: global.pdDebug.connected.link.keys.encrypted }), MV);
+  const { key, encrypted } = await kept();
+  assert.ok(key, 'paired');
+  // Encrypted (asynchronously, with the keychain) before it's written.
+  const file = path.join(a.data, 'grapevine.json');
+  const saved = () => (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).peers?.[MV] : null);
+  for (let i = 0; i < 40 && !saved(); i++) await a.win.waitForTimeout(250);
+  assert.ok(saved(), 'saved');
+  assert.equal(!!saved().encrypted, encrypted);
+  if (encrypted) assert.ok(!fs.readFileSync(file, 'utf8').includes(key), 'never written as it is');
+  const next = await launchApp({ seed: false, files: { 'grapevine.json': fs.readFileSync(file) } });
+  try {
+    const back = await next.app.evaluate(async (_e, id) => {
+      await global.pdDebug.connected.link.keys.ready;
+      return global.pdDebug.connected.link.keys.get(id)?.key;
+    }, MV);
+    assert.equal(back, key, 'the same key, decrypted');
+    assert.deepEqual(next.errors, []);
+  } finally {
+    await next.close();
+  }
 });
 
 test('what the two share: a line each, by direction, the whole sentence in its tooltip; the card still fits', async () => {
