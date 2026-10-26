@@ -44,6 +44,32 @@ test('slim keeps what the app shows, not the channel list', () => {
   assert.equal(s.category.image_url, 'https://files.example/cat.png');
 });
 
+test('an image Kick lists again while it downloads is fetched and written once', async () => {
+  let release;
+  const gate = new Promise((r) => (release = r));
+  const { archive, fetched } = fresh(async () => {
+    await gate;
+    return { buffer: PNG, type: 'image/png' };
+  });
+  const writes = [];
+  const writeFile = fs.promises.writeFile;
+  fs.promises.writeFile = (file, ...rest) => (writes.push(path.basename(file)), writeFile(file, ...rest));
+  try {
+    archive.update([camp('a')], [], Date.now());
+    const pumping = archive.pump();
+    // The next tick, with the first image still on its way.
+    archive.update([camp('a')], [], Date.now());
+    release();
+    await pumping;
+    await archive.pump();
+  } finally {
+    fs.promises.writeFile = writeFile;
+  }
+  assert.deepEqual(fetched.sort(), ['https://files.example/a.png', 'https://files.example/cat.png']);
+  assert.equal(writes.length, 2, 'each file written once, never rewritten after it is served');
+  assert.deepEqual(fs.readFileSync(archive.fileFor(archive.img('https://files.example/a.png')).path), PNG);
+});
+
 test('data: images decode, both base64 and percent-encoded', () => {
   assert.equal(decodeData('data:image/png;base64,aGk=').buffer.toString(), 'hi');
   const svg = decodeData('data:image/svg+xml;charset=utf-8,%3Csvg%2F%3E');

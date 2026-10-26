@@ -29,7 +29,9 @@ test('the Done tab lists finished and missed drops, with stored images', async (
   assert.match(await a.win.locator('.past', { hasText: 'Meltdown' }).textContent(), /Taken down/);
 
   // Images come from the app's own copies and actually load.
+  // An image that failed has become its placeholder, so none may be missing.
   await until(a.win, () => [...document.querySelectorAll('.past img')].every((i) => i.src.startsWith('pd-img://drop/') && i.complete && i.naturalWidth > 0), 'stored images to load');
+  assert.equal(await a.win.locator('.past .cat-art.img-missing').count(), 0, 'no stored image failed to load');
   const files = fs.readdirSync(path.join(a.data, 'drop-images'));
   assert.ok(files.length >= 10, `${files.length} images stored`);
 
