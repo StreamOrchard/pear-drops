@@ -2,7 +2,7 @@
 // Updates: Settings › Updates, the titlebar chip when a new version is waiting, and the
 // "Updated to x" card the first time a new version opens.
 
-const upd = { status: null, changelog: null, notesKey: null, notesSafe: '' };
+const upd = { status: null, changelog: null, changelogTries: 0, notesKey: null, notesSafe: '' };
 
 // GitHub's release notes as HTML (rendered and cleaned by GitHub, as on the release page).
 // Only plain formatting, https links and images are kept; anything else becomes its text.
@@ -260,10 +260,18 @@ function setUpdateStatus(status) {
 function initUpdates() {
   window.pd.updates.onStatus(setUpdateStatus);
   window.pd.updates.status().then(setUpdateStatus);
-  window.pd.updates.changelog().then((list) => {
-    upd.changelog = list;
-    render();
-  });
+  // (Asked again a little later if the app couldn't answer yet, rather than spinning for good.)
+  const loadChangelog = (wait = 500) => {
+    upd.changelogTries++;
+    return window.pd.updates.changelog().then(
+      (list) => {
+        upd.changelog = list;
+        render();
+      },
+      () => setTimeout(() => loadChangelog(Math.min(wait * 2, 8000)), wait),
+    );
+  };
+  loadChangelog();
   document.addEventListener('submit', (event) => {
     const form = event.target.closest?.('[data-update-repo]');
     if (!form) return;
