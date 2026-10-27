@@ -760,6 +760,12 @@ function registerIpc() {
     if (typeof slug !== 'string' || !/^[a-z0-9_-]{1,40}$/i.test(slug) || idArg(categoryId) === null) throw new Error('Stream is no longer available');
     return farmer.watchManual(slug, categoryId);
   });
+  // Change stream, while watching for the daily reward: the streams to pick from, and the one picked.
+  mainIpc.handle('reward:streams', () => farmer.rewardStreams());
+  mainIpc.handle('reward:watch', (_e, slug) => {
+    if (typeof slug !== 'string' || !/^[a-z0-9_-]{1,40}$/i.test(slug)) throw new Error('That stream is no longer live');
+    return farmer.watchRewardStream(slug);
+  });
   mainIpc.handle('farm:claim', (_e, campaignId, rewardId) => {
     if (idArg(campaignId) === null || idArg(rewardId) === null) return { error: 'That drop isn’t there any more.' };
     return farmer.claimOne(campaignId, rewardId);

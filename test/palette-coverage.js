@@ -38,6 +38,7 @@ const INDIRECT = {
 const LEFT_OUT = {
   'close-modal': 'closes a dialog: Esc does that',
   'close-whatsnew': 'closes What’s new (its Nice button): Esc does that',
+  'reward-watch': 'one row of Change stream’s list (the list itself is a command: Change the stream for daily rewards)',
   'reward-close': 'closes the reward’s card: Esc does that',
   'reward-back': 'the tray’s back arrow, inside its own window',
   'reward-done': 'ends the reveal that’s playing',

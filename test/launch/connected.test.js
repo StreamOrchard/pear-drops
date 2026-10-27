@@ -286,6 +286,25 @@ test('with no drop to farm, it watches for the daily reward while Stream Multivi
   }
   assert.equal(heard?.state, 'waiting');
 
+  // Change stream: the dialog lists the live streams, the one watched first; another is watched by a click.
+  const was = await watching();
+  for (let i = 0; i < 3 && (await a.win.locator('#modal-root .modal').count()); i++) await a.win.keyboard.press('Escape');
+  await a.win.click('#hero [data-action="reward-streams"]');
+  await until(a.win, () => document.querySelector('.modal.reward-streams .rs-row.on') && document.querySelector('.modal.reward-streams [data-action="reward-watch"]'), 'the streams');
+  assert.match(await a.win.textContent('.modal.reward-streams .rs-row.on'), /Watching/);
+  const pick = await a.win.getAttribute('.modal.reward-streams [data-action="reward-watch"]', 'data-slug');
+  assert.notEqual(pick, was);
+  const fits = await a.win.evaluate(() => {
+    const el = document.querySelector('.modal.reward-streams .modal-section');
+    return el.scrollHeight <= el.clientHeight + 1;
+  });
+  assert.ok(fits, 'the list fits without scrolling');
+  await a.win.click(`.modal.reward-streams [data-action="reward-watch"][data-slug="${pick}"]`);
+  await until(a.win, () => !document.querySelector('.modal.reward-streams'), 'the dialog closed');
+  for (let i = 0; i < 60 && (await watching()) !== pick; i++) await a.win.waitForTimeout(150);
+  assert.equal(await watching(), pick);
+  assert.equal(await a.app.evaluate(() => global.pdDebug.farmer.current.manual), true);
+
   // Its players watch signed in, as this account: left at once.
   await a.demo((d) => d.multiview({ signedIn: true, mode: 'manual', open: ['pixelpear'] }));
   for (let i = 0; i < 100 && (await watching()); i++) await a.win.waitForTimeout(150);

@@ -53,6 +53,9 @@ contextBridge.exposeInMainWorld('pd', {
   skip: () => ipcRenderer.invoke('farm:skip'),
   reload: () => ipcRenderer.invoke('farm:reload'),
   watch: (slug, categoryId) => ipcRenderer.invoke('farm:watch', slug, categoryId),
+  // Change stream, while watching for the daily reward.
+  rewardStreams: () => ipcRenderer.invoke('reward:streams'),
+  watchRewardStream: (slug) => ipcRenderer.invoke('reward:watch', slug),
   claim: (campaignId, rewardId) => ipcRenderer.invoke('farm:claim', campaignId, rewardId),
   follow: (slug, on) => ipcRenderer.invoke('farm:follow', slug, on),
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),

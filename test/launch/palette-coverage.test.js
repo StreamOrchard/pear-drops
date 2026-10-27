@@ -101,6 +101,26 @@ test('open every part of the app, and note every button and tab that shows', asy
   await until(a.win, () => document.querySelector('#banner .banner'), 'the banner', 30000).catch(() => {});
   await look('the credit banner');
   await a.demo((d) => d.conflict(false));
+  // Watching for the daily reward (every drop switched off), and its Change stream dialog.
+  const rows = await a.app.evaluate(() => global.pdDebug.farmer.model.categories.map((c) => c.id));
+  await a.demo((d) => d.daily({ minutes: 10 }));
+  await a.win.evaluate((ids) => window.pd.setSettings({ disabledCategories: ids }), rows);
+  await a.demo(async (d) => {
+    while (d.farmer.ticking) await new Promise((r) => setTimeout(r, 50));
+    await d.tick();
+  });
+  await until(a.win, () => document.querySelector('#hero [data-action="reward-streams"]'), 'watching for the daily reward', 15000);
+  await look('the hero, watching for the daily reward');
+  await click('#hero [data-action="reward-streams"]');
+  await until(a.win, () => document.querySelector('.modal.reward-streams [data-action="reward-watch"]'), 'Change stream');
+  await look('Change stream');
+  await a.win.keyboard.press('Escape');
+  await a.win.evaluate(() => window.pd.setSettings({ disabledCategories: [] }));
+  await a.demo(async (d) => {
+    while (d.farmer.ticking) await new Promise((r) => setTimeout(r, 50));
+    await d.tick();
+  });
+  await a.farming();
   // The tray popover.
   await a.demo((d) => d.openTray());
   for (let i = 0; i < 30; i++) {
