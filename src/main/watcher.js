@@ -110,12 +110,15 @@ class Watcher extends EventEmitter {
   /**
    * @param {() => BrowserWindow} getWindow the main window
    * @param {() => object} getSettings
-   * @param {{ ipcMain?: object, contents?: { fromId: (id: number) => object } }} [electron] Electron's, or a test's stand-ins
+   * @param {{ ipcMain?: object, contents?: { fromId: (id: number) => object }, silent?: boolean }} [electron] Electron's, or a test's
+   *   stand-ins; silent: never any sound, whatever setSound says (the hidden test runs)
    */
-  constructor(getWindow, getSettings, { ipcMain = electronIpc, contents = allContents } = {}) {
+  constructor(getWindow, getSettings, { ipcMain = electronIpc, contents = allContents, silent = false } = {}) {
     super();
     this.getWindow = getWindow;
     this.getSettings = getSettings;
+    this.silent = silent;
+    this.sound = false; // the stream's sound on (the button by the stream): off at every launch
     this.contents = contents;
     this.view = null; // the player (light) or the whole channel page (full): { webContents }
     this.chatView = null; // the popout chat (light mode only)
@@ -231,9 +234,26 @@ class Watcher extends EventEmitter {
     return true;
   }
 
-  /** What every page of the stream gets: muted, links to the browser, staying on the stream, crash reports. */
+  /**
+   * The stream's sound on or off (the button by the stream). Only the player: the chat, and every
+   * other page, stays muted. Not kept between launches.
+   */
+  setSound(on) {
+    this.sound = !!on;
+    const wc = this.view?.webContents;
+    if (!wc || wc.isDestroyed()) return;
+    wc.setAudioMuted(!this.audible('player'));
+    wc.send('watch:config', { sound: this.sound });
+  }
+
+  /** Whether a page of the stream may be heard: the player, with the sound on. */
+  audible(role) {
+    return role === 'player' && this.sound && !this.silent;
+  }
+
+  /** What every page of the stream gets: muted (the player unless the sound is on), links to the browser, staying on the stream, crash reports. */
   wire(wc, role) {
-    wc.setAudioMuted(true);
+    wc.setAudioMuted(!this.audible(role));
     // Links from Kick's page open in the browser: http(s) only, and just after you clicked in it.
     const open = (url) => openLink(url, { from: wc });
     wc.setWindowOpenHandler(({ url }) => {
@@ -276,7 +296,7 @@ class Watcher extends EventEmitter {
     });
     wc.on('did-finish-load', () => {
       wc.setZoomFactor(role === 'chat' ? ZOOM.chat : this.mode === 'full' ? ZOOM.page : ZOOM.player);
-      if (role !== 'chat') wc.send('watch:config', { unmutePlayer: this.getSettings().unmutePlayer });
+      if (role !== 'chat') wc.send('watch:config', { unmutePlayer: this.getSettings().unmutePlayer, sound: this.sound });
     });
     if (role === 'chat') {
       // A chat that fails just loads again; it doesn't affect drops.

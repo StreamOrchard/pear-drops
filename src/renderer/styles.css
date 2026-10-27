@@ -6799,3 +6799,11 @@ button.status-pill:hover {
   color: var(--muted);
   font-size: 12px;
 }
+/* The stream's sound, by the stream: quiet while muted, green while on. */
+.player-foot .sound-btn {
+  margin-left: -8px;
+  color: var(--muted);
+}
+.player-foot .sound-btn.on {
+  color: var(--green);
+}

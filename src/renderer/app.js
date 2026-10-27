@@ -443,7 +443,7 @@ function renderStats() {
   const p = f.player ?? {};
   const health = streamHealth(f);
   // On a narrow card, "540p · window muted" keeps the resolution.
-  const player = health ? [health.label, health.tone, esc(health.foot).replace(' · window muted', '<span class="opt"> · window muted</span>')] : ['Idle', '', 'nothing playing'];
+  const player = health ? [health.label, health.tone, esc(health.foot).replace(/ · (window muted|sound on)$/, '<span class="opt"> · $1</span>')] : ['Idle', '', 'nothing playing'];
   const nextEvent = p.lastEventAt ? p.lastEventAt + 120_000 - Date.now() : null;
   const conflictTone = f.eventsSinceCredit >= 3 ? 'bad' : f.eventsSinceCredit >= 2 ? 'warn' : '';
 
@@ -922,6 +922,12 @@ function activityPanel(f) {
   return `<div class="log">${items || `<div class="empty">${icon('pulse')}Nothing yet.</div>`}</div>`;
 }
 
+/** The stream's sound, by the stream: Unmute while it's muted (as it is at every launch), Mute while it's on. */
+function soundButton(f) {
+  const on = !!f?.player?.sound;
+  return `<button class="btn sm ghost sound-btn ${on ? 'on' : ''}" data-action="sound" aria-pressed="${on}" data-tip="${on ? 'Mute the stream' : 'Hear the stream. Muted again at the next launch'}">${icon(on ? 'volume' : 'volumeOff')}<span>${on ? 'Mute' : 'Unmute'}</span></button>`;
+}
+
 function renderSide() {
   // Don't rebuild the list under a drag in progress.
   if (ui.drag) return;
@@ -985,7 +991,7 @@ function renderPlayer() {
   );
   setHTML(
     $('#player-foot'),
-    `${icon('volumeOff')}<span>Window muted</span><span class="spacer"></span><span>${cur ? `Kick's player · ${f.player?.eventsSent ?? 0} events` : ''}</span>`,
+    `${soundButton(f)}<span class="spacer"></span><span>${cur ? `Kick's player · ${f.player?.eventsSent ?? 0} events` : ''}</span>`,
   );
   placeDevMenu();
   syncPlayerBounds();
@@ -1251,7 +1257,7 @@ const SETTINGS_ROWS = [
     page: 'app',
     id: 'unmutePlayer',
     title: 'Keep the player unmuted',
-    sub: 'Sound is always muted at the window. Leaving the player itself unmuted keeps it playing normally in the background.',
+    sub: 'The window stays muted unless you unmute the stream beside it. Leaving the player itself unmuted keeps it playing normally in the background.',
     type: 'switch',
     words: ['mute', 'sound'],
   },
@@ -1875,6 +1881,7 @@ const actions = {
   refresh: () => window.pd.refresh(),
   skip: () => window.pd.skip(),
   reload: () => window.pd.reload(),
+  sound: () => window.pd.setSound(!farm()?.player?.sound),
   settings: () => openModal('settings'),
   'close-modal': () => closeModal(),
   palette: () => palette.toggle(),

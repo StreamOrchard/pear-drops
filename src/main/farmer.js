@@ -2009,7 +2009,7 @@ class Farmer extends EventEmitter {
         manual: cur.manual,
         reward: !!cur.reward,
       },
-      player: this.watcher.status,
+      player: { ...this.watcher.status, sound: !!this.watcher.sound },
       health: this.health(),
       notice: this.notice && Date.now() - this.notice.at < NOTICE_MS ? this.notice : null,
       categories: this.model.categories.map((cat) => ({

@@ -48,7 +48,7 @@ function streamHealth(f) {
   if (!f?.current || !h) return null;
   const v = f.player?.video;
   const look = {
-    playing: ['Playing', 'good', `${v?.height ? `${v.height}p · ` : ''}window muted`],
+    playing: ['Playing', 'good', `${v?.height ? `${v.height}p · ` : ''}${f.player?.sound ? 'sound on' : 'window muted'}`],
     loading: ['Loading', 'warn', 'starting the player'],
     buffering: ['Buffering', 'warn', 'waiting for video'],
     paused: ['Paused', 'bad', 'will resume itself'],
