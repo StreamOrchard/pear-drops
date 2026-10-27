@@ -53,6 +53,7 @@ Pear Drops updates itself: Settings › Updates shows when there's a new version
   - sleep and wake
 
   What's wrong shows at once: the LIVE chip turns Frozen, Buffering or Checking on the dashboard and in the tray, and a notice says what happened and where it went next.
+- **Watches for daily rewards:** with no drop to farm (all collected, or none live), it watches a stream until Kick's daily crate and any event's (Trick or Treat, say) are earned: a live channel you follow first, or Kick's most watched. A drop's stream going live comes first, and it doesn't while Stream Multiview is watching Kick as you. On by default (Settings › Farming › Watch for daily rewards).
 - **Conflict alarm:** Kick credits **one stream per account**. If the player keeps sending watch events and none are credited, another Kick stream on your account (a multiview, another tab, the phone app) is taking the credit. The app chimes and shows a banner.
 - **History:** a permanent local log of everything: credits, unlocks, claims, stalls, reloads, crashes, switches, conflicts and completions. It has an overview (daily activity, when you farm, efficiency, top channels), a per-drop view, a timeline, and watch-session and channel tables.
 - **Menu bar / tray:** closing or minimizing keeps it farming. The tray icon is a progress ring, and its popover shows the current drop, ETAs and quick controls.

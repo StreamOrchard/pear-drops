@@ -384,11 +384,25 @@ function createDailyReward() {
   // Kick's realtime "the hour is done", when the docked page hears it.
   watcher.on('gamification', () => dailyReward.goalReached());
   farmer.on('update', noticeWatching);
+  dailyReward.on('change', () => farmer.rewardWatchChanged());
 }
 
 /** Whether the daily hour is being earned: Pear Drops is watching, or a connected app's Kick players are, as this account. */
 function rewardWatching() {
   return auth.status === 'signed-in' && ((!!farmer.current && !farmer.paused) || !!connected?.kickPlayersWatching());
+}
+
+/**
+ * Why Pear Drops shouldn't watch a stream for Kick's daily reward (and event crates) while there's
+ * no drop to farm, or null when it should: Settings › Farming › Watch for daily rewards is on, one
+ * still fills by watching, and no connected app's Kick players are watching as this account.
+ */
+function rewardWatchBlocker() {
+  if (!store.get().rewardWatch) return 'Watch for daily rewards is off';
+  if (auth.status !== 'signed-in') return 'Signed out';
+  if (connected?.kickPlayersWatching()) return 'Stream Multiview is watching Kick as you';
+  if (!dailyReward?.needsWatching()) return 'The daily rewards are earned';
+  return null;
 }
 
 /** Watching started (here or in a connected app): the daily reward looks more often from now on. */
@@ -759,7 +773,7 @@ function registerIpc() {
     }
   });
   mainIpc.handle('settings:set', (_e, patch) => {
-    const allowed = ['stallMinutes', 'refreshSeconds', 'autoClaim', 'includeGameDrops', 'unmutePlayer', 'playerOpen', 'categoryOrder', 'disabledCategories', 'forgetOnQuit', 'alertOnStall', 'repeatAlert', 'alertRepeatSeconds', 'minimizeToTray', 'trayPercent', 'prioritizeExpiring', 'queueMode', 'campaignsMinutes', 'streamsMinutes', 'followedMinutes', 'playerMode', 'showChat', 'playerQuality', 'font', 'smartRarity', 'smartHopMinutes', 'notify', 'notifyAway', 'backupEvery', 'backupKeep', 'dailyClaim', 'developerTools', 'developerToolsWarned', 'searchBox', 'searchRecent'];
+    const allowed = ['stallMinutes', 'refreshSeconds', 'autoClaim', 'includeGameDrops', 'unmutePlayer', 'playerOpen', 'categoryOrder', 'disabledCategories', 'forgetOnQuit', 'alertOnStall', 'repeatAlert', 'alertRepeatSeconds', 'minimizeToTray', 'trayPercent', 'prioritizeExpiring', 'queueMode', 'campaignsMinutes', 'streamsMinutes', 'followedMinutes', 'playerMode', 'showChat', 'playerQuality', 'font', 'smartRarity', 'smartHopMinutes', 'notify', 'notifyAway', 'backupEvery', 'backupKeep', 'dailyClaim', 'rewardWatch', 'developerTools', 'developerToolsWarned', 'searchBox', 'searchRecent'];
     const clean = Object.fromEntries(Object.entries(patch ?? {}).filter(([k]) => allowed.includes(k)));
     if (clean.stallMinutes !== undefined) clean.stallMinutes = Math.min(120, Math.max(5, Number(clean.stallMinutes) || 20));
     if (clean.refreshSeconds !== undefined) clean.refreshSeconds = Math.min(300, Math.max(30, Number(clean.refreshSeconds) || 60));
@@ -796,6 +810,7 @@ function registerIpc() {
     if ('backupEvery' in clean) backups.check();
     // A new way of claiming the daily reward may mean claiming it now.
     if ('dailyClaim' in clean) dailyReward?.afterRefresh();
+    if ('rewardWatch' in clean) farmer.rewardWatchChanged();
     if (['includeGameDrops', 'categoryOrder', 'disabledCategories', 'queueMode', 'smartRarity', 'smartHopMinutes'].some((k) => k in clean)) {
       farmer.buildModel();
       farmer.tick();
@@ -1088,7 +1103,7 @@ app.whenReady().then(async () => {
   });
   if (DEMO && env('PD_DEMO_SEED') && history.isEmpty()) demo.seedHistoryLog(history);
   createNotifier();
-  farmer = new Farmer({ api, watcher, store, history, archive, cache: db.cache });
+  farmer = new Farmer({ api, watcher, store, history, archive, cache: db.cache, rewardWatch: rewardWatchBlocker });
   // Settings › Developer › Watch events: each one from the player, credited once progress goes up.
   watcher.on('watch-event', ({ channelId }) => {
     devLog.watch({ slug: watcher.slug, channelId });
@@ -1141,6 +1156,7 @@ app.whenReady().then(async () => {
   });
   connected.on('change', sendState);
   connected.on('change', noticeWatching);
+  connected.on('change', () => farmer.rewardWatchChanged());
   // The Activity view refetches its page when there's something new (at most a few times a second).
   let activityTimer = null;
   connected.on('activity', () => {

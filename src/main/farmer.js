@@ -102,9 +102,15 @@ function fmtSpan(ms) {
 }
 
 class Farmer extends EventEmitter {
-  constructor({ api, watcher, store, history, archive = null, cache = null }) {
+  /**
+   * @param {object} o
+   * @param {() => (string|null)} [o.rewardWatch] why not to watch a stream for Kick's daily reward
+   *   (and event crates) while there's no drop to farm, or null to watch one
+   */
+  constructor({ api, watcher, store, history, archive = null, cache = null, rewardWatch = () => 'Off' }) {
     super();
     this.api = api;
+    this.rewardWatch = rewardWatch;
     this.archive = archive; // local copies of campaigns and their images (archive.js)
     this.cache = cache; // the startup cache's store, { load(), save(data) } (db.js)
     this.history = history;
@@ -152,6 +158,7 @@ class Farmer extends EventEmitter {
     this.stats = {
       sessionStart: Date.now(),
       watchMs: 0,
+      rewardWatchMs: 0,
       watchTickAt: null,
       earned: 0,
       claims: 0,
@@ -164,7 +171,8 @@ class Farmer extends EventEmitter {
       this.stats.eventsSent += 1;
       this.saveCache(); // so a restart carries the count on
       this.pushTimeline({ t, type: 'sent' });
-      if (this.current) {
+      // Watching for the daily reward, no drop credit is expected.
+      if (this.current && !this.current.reward) {
         this.eventsSinceCredit += 1;
         this.checkCreditConflict(t);
       }
@@ -193,7 +201,10 @@ class Farmer extends EventEmitter {
 
   /** The current stream, for a history event. */
   streamCtx(cur = this.current) {
-    return cur ? { session: cur.session, slug: cur.slug, channel: cur.username, avatar: cur.avatar, categoryId: cur.categoryId, category: cur.categoryName, ...(cur.targetId !== cur.categoryId ? { targetId: cur.targetId } : {}), campaignIds: cur.campaignIds } : {};
+    if (!cur) return {};
+    const ctx = { session: cur.session, slug: cur.slug, channel: cur.username, avatar: cur.avatar, categoryId: cur.categoryId, category: cur.categoryName, campaignIds: cur.campaignIds };
+    if (cur.reward) return { ...ctx, reward: true };
+    return { ...ctx, ...(cur.targetId !== cur.categoryId ? { targetId: cur.targetId } : {}) };
   }
 
   record(type, data) {
@@ -258,7 +269,7 @@ class Farmer extends EventEmitter {
       if (!this.paused) await this.decide();
       // Kick answers again: a stream that carried on through the failed refresh is farming again
       // (decide() only sets the status when it picks a stream).
-      if (this.status.code === 'error' && this.current) this.setStatus('farming', `Watching ${this.current.username}`);
+      if (this.status.code === 'error' && this.current) this.setStatus(this.current.reward ? 'rewards' : 'farming', `Watching ${this.current.username}${this.current.reward ? ' for the daily reward' : ''}`);
       this.failedTicks = 0;
       this.checked(true);
     } catch (err) {
@@ -407,7 +418,7 @@ class Farmer extends EventEmitter {
    */
   resumeRun(c, now = Date.now()) {
     if (!c?.stats || !(now - c.savedAt <= RESUME_MS)) return;
-    for (const k of ['sessionStart', 'watchMs', 'earned', 'claims', 'switches', 'reloads', 'eventsSent']) {
+    for (const k of ['sessionStart', 'watchMs', 'rewardWatchMs', 'earned', 'claims', 'switches', 'reloads', 'eventsSent']) {
       if (Number.isFinite(c.stats[k])) this.stats[k] = c.stats[k];
     }
     // One left without an end (the app crashed) was still on when the cache was last saved.
@@ -1276,9 +1287,18 @@ class Farmer extends EventEmitter {
       const categories = info.livestream.categories?.map((c) => c.id) ?? [];
       cur.title = info.livestream.session_title ?? cur.title;
       cur.viewers = info.livestream.viewer_count ?? cur.viewers;
-      if (categories.length && !categories.includes(cur.categoryId)) {
+      if (!cur.reward && categories.length && !categories.includes(cur.categoryId)) {
         return { kind: 'category', text: 'Streamer changed category', block: 15 * MIN };
       }
+    }
+
+    // Watching for the daily reward: a drop with a live stream comes first, and it stops once the
+    // reward needn't be watched for. Any stream counts, so there's no credit to stall.
+    if (cur.reward) {
+      if (this.firstWatchableCategory()) return { text: 'A drop has a live stream' };
+      const why = this.rewardWatch();
+      if (why) return { text: why };
+      return this.playerStuck(cur, null, now);
     }
 
     // Every few minutes, ask Kick again whether this stream still counts (a channel can
@@ -1320,12 +1340,17 @@ class Farmer extends EventEmitter {
       return { kind: 'stall', text, reload: true, resetTo: now - stallMs / 2 };
     }
 
+    return this.playerStuck(cur, cat, now);
+  }
+
+  /** A player that isn't playing: reloaded, then (a few reloads on, with another stream to go to) left. */
+  playerStuck(cur, cat, now) {
     const ws = this.watcher.status;
     const stuckSince = Math.max(ws.lastAdvanceAt ?? 0, cur.lastReloadAt ?? 0);
     if (ws.loadedAt && now - ws.loadedAt > PLAYER_START_MS && now - stuckSince > PLAYER_STUCK_MS) {
       cur.lastReloadAt = now;
       cur.stuckReloads = (cur.stuckReloads ?? 0) + 1;
-      const alternatives = (cat?.streams ?? []).some((s) => !s.blocked && s.slug !== cur.slug);
+      const alternatives = cur.reward || (cat?.streams ?? []).some((s) => !s.blocked && s.slug !== cur.slug);
       if (cur.stuckReloads > MAX_STUCK_RELOADS && alternatives && !cur.manual) {
         return { text: 'Player still not playing after reloads', block: 30 * MIN };
       }
@@ -1340,6 +1365,7 @@ class Farmer extends EventEmitter {
     if (!targets.length) {
       this.lastCreditAt = null;
       this.eventsSinceCredit = 0;
+      if (await this.watchForReward()) return;
       const anything = this.model.campaigns.length;
       this.setStatus('done', anything ? 'Every emote and badge drop is claimed' : 'No active emote or badge drops');
       return;
@@ -1363,7 +1389,79 @@ class Farmer extends EventEmitter {
     }
     this.lastCreditAt = null;
     this.eventsSinceCredit = 0;
+    if (await this.watchForReward()) return;
     this.setStatus('waiting', 'No live streams for the remaining drops, checking again soon');
+  }
+
+  /**
+   * No drop to watch: a stream for Kick's daily reward (and an event's crate), which any stream
+   * fills, unless it needn't be (rewardWatch says why). A live channel you follow first, then
+   * Kick's most watched (not one marked mature). Whether one was picked.
+   */
+  async watchForReward() {
+    const why = this.rewardWatch();
+    if (why) return false;
+    let list = [];
+    try {
+      list = await this.api.livestreams(undefined, { maxPages: 1, limit: 50 });
+    } catch (err) {
+      this.addLog('warn', `Could not list live streams for the daily reward: ${err.message}`);
+      return false;
+    }
+    const now = Date.now();
+    const streams = list
+      .filter((ls) => ls?.channel?.slug && (this.blacklist.get(ls.channel.slug) ?? 0) <= now)
+      .map((ls) => ({
+        slug: ls.channel.slug,
+        channelId: ls.channel.id,
+        username: ls.channel.username ?? ls.channel.slug,
+        avatar: ls.channel.profile_pic,
+        title: ls.title ?? ls.session_title ?? '',
+        viewers: ls.viewer_count ?? 0,
+        thumbnail: ls.thumbnail?.src,
+        mature: !!ls.is_mature,
+        category: ls.category ?? ls.categories?.[0] ?? null,
+        followed: this.followed.has(String(ls.channel.slug).toLowerCase()),
+      }))
+      .filter((s) => s.followed || !s.mature)
+      .sort((a, b) => Number(b.followed) - Number(a.followed) || b.viewers - a.viewers);
+    const stream = streams[0];
+    if (!stream) return false;
+    const reason = stream.followed ? 'a channel you follow' : `the most watched on Kick (${stream.viewers} viewers)`;
+    const text = `Picked ${stream.username} for the daily reward: no drop to watch, ${reason}`;
+    this.addLog('info', text);
+    this.record('decision', { slug: stream.slug, channel: stream.username, avatar: stream.avatar, reward: true, text });
+    this.lastCreditAt = null;
+    this.eventsSinceCredit = 0;
+    this.startWatching(stream, { id: null, categoryId: stream.category?.id ?? null, name: 'the daily reward', category: { name: stream.category?.name ?? '' } }, [], false, { reward: true, why: reason });
+    return true;
+  }
+
+  /**
+   * What rewardWatch says may have changed (its setting, the daily reward, a connected app's
+   * players): a stream watched for the daily reward is left, or one is picked, now rather than at
+   * the next refresh.
+   */
+  async rewardWatchChanged() {
+    if (!this.running || this.paused || this.ticking) return;
+    const cur = this.current;
+    const why = this.rewardWatch();
+    const leave = cur?.reward && why;
+    if (!leave && (cur || why || !['done', 'waiting'].includes(this.status.code))) return;
+    this.ticking = true;
+    try {
+      if (leave) {
+        this.setNotice('switch', `Left ${cur.username}: ${why.replace(/^./, (x) => x.toLowerCase())}`, cur);
+        this.addLog('switch', `${why}, leaving ${cur.username}`);
+        this.stopWatching(why);
+      }
+      await this.pickStream();
+    } catch (err) {
+      this.addLog('warn', `Could not pick a stream: ${err.message}`);
+    } finally {
+      this.ticking = false;
+      this.changed();
+    }
   }
 
   /** The first stream in a category Kick confirms counts for its drops (marks the ones that don't). */
@@ -1437,7 +1535,7 @@ class Farmer extends EventEmitter {
     }
   }
 
-  startWatching(stream, cat, campaignIds, manual) {
+  startWatching(stream, cat, campaignIds, manual, { reward = false, why = null } = {}) {
     const now = Date.now();
     // The same stream as before a quick restart: it has been watched since then.
     const resumed = this.resumeWatch?.slug === stream.slug ? this.resumeWatch : null;
@@ -1458,8 +1556,9 @@ class Farmer extends EventEmitter {
       reloads: 0,
       credited: 0,
       manual,
+      reward, // for Kick's daily reward (and event crates), with no drop to watch
       // Why it was picked (recordPick), for Why isn't this farming?
-      pickedWhy: manual ? 'picked by you' : this.pickWhy?.slug === stream.slug ? this.pickWhy.text : null,
+      pickedWhy: manual ? 'picked by you' : (why ?? (this.pickWhy?.slug === stream.slug ? this.pickWhy.text : null)),
       session: `${now.toString(36)}-${stream.slug}`,
     };
     this.pickWhy = null;
@@ -1478,7 +1577,10 @@ class Farmer extends EventEmitter {
     this.lastCreditAt ??= now;
     this.pushTimeline({ t: now, type: 'switch', name: stream.username });
     this.addLog('switch', `Watching ${stream.username} for ${cat.name}${manual ? ' (manual)' : ''}`);
-    this.setStatus('farming', `Watching ${stream.username}`);
+    // Not 'farming': connected apps hear Pear Drops isn't farming a drop (drops.farming's 'waiting'),
+    // so Stream Multiview leaves its Kick players signed in.
+    if (reward) this.setStatus('rewards', `Watching ${stream.username} for the daily reward`);
+    else this.setStatus('farming', `Watching ${stream.username}`);
     this.watcher.watch(stream.slug);
     this.changed();
   }
@@ -1708,13 +1810,15 @@ class Farmer extends EventEmitter {
     else if (cur) {
       const curRow = categories.find((r) => r.id === cur.targetId);
       const ahead = curRow && categories.indexOf(curRow) < categories.indexOf(row);
-      const note = cur.manual
-        ? 'You picked it'
-        : ahead
-          ? this.rankReason(curRow, row, now, settings)
-          : settings.queueMode === 'smart'
-            ? `Smart order switches for at least ${settings.smartHopMinutes ?? 30} min less expected live time left`
-            : 'It switches at the next check';
+      const note = cur.reward
+        ? 'For the daily reward: it moves to a drop’s stream at the next check'
+        : cur.manual
+          ? 'You picked it'
+          : ahead
+            ? this.rankReason(curRow, row, now, settings)
+            : settings.queueMode === 'smart'
+              ? `Smart order switches for at least ${settings.smartHopMinutes ?? 30} min less expected live time left`
+              : 'It switches at the next check';
       add('pick', false, `Watching ${cur.username} for ${cur.targetName} instead`, note);
     } else if (this.paused || !signedIn) add('pick', null, `Nothing is picked while ${signedIn ? 'it’s paused' : 'signed out'}`);
     else add('pick', null, 'A stream is picked at the next check', this.nextTickAt ? `In ${Math.max(0, Math.round((this.nextTickAt - now) / 1000))}s` : '');
@@ -1764,7 +1868,8 @@ class Farmer extends EventEmitter {
   accumulateWatchTime() {
     const now = Date.now();
     if (this.current && this.stats.watchTickAt) {
-      this.stats.watchMs += now - this.stats.watchTickAt;
+      // Watching for the daily reward earns no drop credit: kept apart, so efficiency is the drops'.
+      this.stats[this.current.reward ? 'rewardWatchMs' : 'watchMs'] += now - this.stats.watchTickAt;
       this.stats.watchTickAt = now;
     }
   }
@@ -1833,7 +1938,7 @@ class Farmer extends EventEmitter {
   trayInfo() {
     const cur = this.current;
     const conflict = !!cur && this.eventsSinceCredit >= CONFLICT_EVENTS;
-    let tone = this.paused ? 'paused' : conflict ? 'conflict' : ({ farming: 'farming', waiting: 'waiting', done: 'done', error: 'error' }[this.status.code] ?? 'idle');
+    let tone = this.paused ? 'paused' : conflict ? 'conflict' : ({ farming: 'farming', rewards: 'farming', waiting: 'waiting', done: 'done', error: 'error' }[this.status.code] ?? 'idle');
     let fraction = 0;
     let title = '';
     let tooltip = `Pear Drops · ${this.paused ? 'Paused' : this.status.message}`;
@@ -1896,6 +2001,7 @@ class Farmer extends EventEmitter {
         lastProgressAt: cur.lastProgressAt,
         reloads: cur.reloads,
         manual: cur.manual,
+        reward: !!cur.reward,
       },
       player: this.watcher.status,
       health: this.health(),

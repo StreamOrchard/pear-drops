@@ -206,6 +206,14 @@ function crateList(dr) {
   return [daily, ...(dr.extras ?? []).map((e) => ({ id: e.id, label: e.name || 'Event reward', title: e.name || 'Event reward', state: e.state, theme: e.theme ?? 'event', prize: e.won?.winner }))];
 }
 
+/** The crates still filling by watch time (the daily one first), for the stream watched for them. */
+function fillingCrates(dr) {
+  return [
+    ...(dr?.state === 'earning' ? [{ title: 'Daily reward', theme: 'daily', minutes: dr.minutes, threshold: dr.threshold }] : []),
+    ...(dr?.extras ?? []).filter((e) => e.state === 'earning' && e.condition === 'watch_time_minutes').map((e) => ({ title: e.name || 'Event reward', theme: e.theme ?? 'event', minutes: e.minutes, threshold: e.threshold })),
+  ];
+}
+
 /** The tab the card opens on: the daily crate when it's ready, else a ready one, else the daily. */
 function openTab(dr) {
   if (!dr || dr.state === 'ready') return dr?.id ?? null;

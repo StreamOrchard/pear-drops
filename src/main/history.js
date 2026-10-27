@@ -198,6 +198,8 @@ class History {
           campaignIds: e.campaignIds ?? [],
           campaigns: e.campaigns ?? [],
           manual: !!e.manual,
+          // For Kick's daily reward, with no drop to watch: no drop credit to measure.
+          ...(e.reward ? { reward: true } : {}),
           credited: 0,
           stalls: 0,
           reloads: 0,
@@ -222,7 +224,7 @@ class History {
     return out
       .map((s) => {
         const ms = (s.end ?? now) - s.start;
-        return { ...s, ms, efficiency: ms > 60_000 ? Math.min(1, s.credited / (ms / 60_000)) : null };
+        return { ...s, ms, efficiency: ms > 60_000 && !s.reward ? Math.min(1, s.credited / (ms / 60_000)) : null };
       })
       .sort((a, b) => a.start - b.start);
   }
@@ -230,11 +232,12 @@ class History {
   totals(events, sessions) {
     const count = (type) => events.filter((e) => e.type === type).length;
     const watchMs = sessions.reduce((sum, s) => sum + s.ms, 0);
+    const dropMs = sessions.reduce((sum, s) => sum + (s.reward ? 0 : s.ms), 0);
     const credited = events.filter((e) => e.type === 'credit').reduce((sum, e) => sum + (e.delta ?? 0), 0);
     return {
       watchMs,
       credited,
-      efficiency: watchMs > 60_000 ? Math.min(1, credited / (watchMs / 60_000)) : null,
+      efficiency: dropMs > 60_000 ? Math.min(1, credited / (dropMs / 60_000)) : null,
       claims: count('claim'),
       unlocks: count('unlock'),
       completed: count('campaign-complete'),
@@ -364,16 +367,17 @@ class History {
   channels(sessions) {
     const map = new Map();
     for (const s of sessions) {
-      if (!map.has(s.slug)) map.set(s.slug, { slug: s.slug, channel: s.channel, avatar: s.avatar, sessions: 0, watchMs: 0, credited: 0, stalls: 0, lastAt: 0 });
+      if (!map.has(s.slug)) map.set(s.slug, { slug: s.slug, channel: s.channel, avatar: s.avatar, sessions: 0, watchMs: 0, dropMs: 0, credited: 0, stalls: 0, lastAt: 0 });
       const c = map.get(s.slug);
       c.sessions += 1;
       c.watchMs += s.ms;
+      if (!s.reward) c.dropMs += s.ms;
       c.credited += s.credited;
       c.stalls += s.stalls;
       c.lastAt = Math.max(c.lastAt, s.end ?? Date.now());
     }
     return [...map.values()]
-      .map((c) => ({ ...c, efficiency: c.watchMs > 60_000 ? Math.min(1, c.credited / (c.watchMs / 60_000)) : null }))
+      .map(({ dropMs, ...c }) => ({ ...c, efficiency: dropMs > 60_000 ? Math.min(1, c.credited / (dropMs / 60_000)) : null }))
       .sort((a, b) => b.watchMs - a.watchMs);
   }
 

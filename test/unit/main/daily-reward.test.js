@@ -763,3 +763,19 @@ test('an event crate’s watch-time prize: shown as level progress, not a pictur
   assert.deepEqual([won.winner.xp, won.xpMinutes, won.levelTo], [30, 30, 66]);
   assert.deepEqual(reward.snapshot().extras[0].prizes, [], 'nothing for the strip');
 });
+
+test('needsWatching: while the daily crate or an event’s fills by watch time, not once they’re ready, nor stopped', async () => {
+  const { reward, kick } = setup();
+  assert.equal(reward.needsWatching(), false, 'not before it starts');
+  reward.start();
+  await settle();
+  assert.equal(reward.needsWatching(), true);
+  kick.challenges = [challenge({ status: 'claimable', progress: 60 }), challenge({ id: 'ev', featured: true, progress: 40, condition: { type: 'watch_time_minutes', progress: 40, threshold: 180 } })];
+  await reward.refresh();
+  assert.equal(reward.needsWatching(), true, 'an event’s crate still fills');
+  kick.challenges = [challenge({ status: 'claimable', progress: 60 })];
+  await reward.refresh();
+  assert.equal(reward.needsWatching(), false);
+  reward.stop();
+  assert.equal(reward.needsWatching(), false);
+});

@@ -1,4 +1,4 @@
-/* global rowArt, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, previewAttrs, icon, brandMark, progressRing, MIN, $, esc, fmtDur, fmtMin, fmtAgo, fmtCount, fmtFinish, streamHealth, streamNotice, setHTML, img, applyFont */
+/* global fillingCrates, rowArt, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, previewAttrs, icon, brandMark, progressRing, MIN, $, esc, fmtDur, fmtMin, fmtAgo, fmtCount, fmtFinish, streamHealth, streamNotice, setHTML, img, applyFont */
 // The tray / menu bar popover: the live state at a glance, with quick controls.
 let state = null;
 let page = 'main'; // or 'reward': the daily reward's card, claimed right here
@@ -24,8 +24,8 @@ function primary(f) {
 function statusLine(f) {
   if (f.conflict) return ['conflict', 'Credit taken'];
   const health = streamHealth(f);
-  if (health && f.status.code === 'farming' && health.state !== 'playing') return [health.tone === 'bad' ? 'error' : 'waiting', health.label];
-  const map = { farming: ['farming', 'Farming'], paused: ['paused', 'Paused'], waiting: ['waiting', 'Waiting'], done: ['done', 'All done'], error: ['error', 'Offline'], starting: ['waiting', 'Starting'] };
+  if (health && ['farming', 'rewards'].includes(f.status.code) && health.state !== 'playing') return [health.tone === 'bad' ? 'error' : 'waiting', health.label];
+  const map = { farming: ['farming', 'Farming'], rewards: ['farming', 'Daily rewards'], paused: ['paused', 'Paused'], waiting: ['waiting', 'Waiting'], done: ['done', 'All done'], error: ['error', 'Offline'], starting: ['waiting', 'Starting'] };
   return map[f.status.code] ?? ['waiting', 'Waiting'];
 }
 
@@ -73,7 +73,27 @@ function render() {
   const collected = { done: tracked.filter((r) => r.claimed).length, all: tracked.length };
   const next = f.categories.filter((c) => c.enabled && c.needsWatching && c.id !== cur?.targetId).slice(0, 3);
 
-  const now = cur
+  // With no drop to farm, a stream watched for the daily reward: its crates filling.
+  const crates = cur?.reward ? fillingCrates(dr) : [];
+  const crate = crates[0];
+  const now = cur?.reward
+    ? `<div class="tray-now">
+        <div class="tray-stream">${img(cur.avatar, 'avatar')}<div class="who"><b>${esc(cur.username)} ${healthMark(f)}</b><span>${esc(cur.categoryName || 'For the daily reward')} · ${fmtCount(cur.viewers)} watching</span></div></div>
+        <div class="tray-progress">
+          ${progressRing(crate ? crate.minutes / Math.max(1, crate.threshold) : 0, { size: 96, stroke: 8, label: crate ? `${Math.floor((crate.minutes / Math.max(1, crate.threshold)) * 100)}%` : '', sub: crate ? `${crate.minutes}/${crate.threshold}m` : '' })}
+          <div class="tray-eta">
+            <div class="tray-camp">Watching for daily rewards</div>
+            <dl class="eta">
+              ${crates
+                .slice(0, 3)
+                .map((c) => `<dt>${esc(c.title)}</dt><dd>${fmtMin(Math.max(0, c.threshold - c.minutes))}</dd>`)
+                .join('')}
+              <dt>Watching for</dt><dd>${fmtDur(Date.now() - cur.startedWatchingAt)}</dd>
+            </dl>
+          </div>
+        </div>
+      </div>`
+    : cur
     ? `<div class="tray-now">
         <div class="tray-stream">${img(cur.avatar, 'avatar')}<div class="who"><b>${esc(cur.username)} ${healthMark(f)}</b><span>${esc(cur.categoryName)} · ${fmtCount(cur.viewers)} watching</span></div></div>
         <div class="tray-progress">

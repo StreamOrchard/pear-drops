@@ -55,6 +55,8 @@ class FakeApi {
   }
   async livestreams(categoryId, opts = {}) {
     (this.listed ??= []).push([categoryId, opts.maxPages]);
+    // No category: Kick's most watched, as for the daily reward.
+    if (categoryId === undefined) return (this.top ?? []).filter((s) => !this.offline.has(s.channel.slug));
     return (this.streams[categoryId] ?? []).filter((s) => !this.offline.has(s.channel.slug));
   }
   async channelInfo(slug) {
@@ -62,6 +64,7 @@ class FakeApi {
     // Live but beyond what the category's listing returns (a small channel in a big category).
     const hidden = this.hidden?.[slug];
     if (hidden && !this.offline.has(slug)) return { livestream: { is_live: true, session_title: `${slug} live`, viewer_count: 3, categories: [{ id: hidden }] } };
+    if (this.top?.some((s) => s.channel.slug === slug) && !this.offline.has(slug)) return { livestream: { is_live: true, categories: [{ id: 99 }] } };
     const cat = Object.entries(this.streams).find(([, list]) => list.some((s) => s.channel.slug === slug));
     if (!cat || this.offline.has(slug)) return { livestream: null };
     return { livestream: { is_live: true, categories: [{ id: Number(cat[0]) }] } };
@@ -1394,4 +1397,169 @@ test('explain: before the first check, a reward being claimed, a row off, an unc
   farmer.current.lastProgressAt = Date.now() - 25 * MIN;
   farmer.current.stallReloaded = true;
   assert.equal(failed(farmer.explain()).note, 'Reloaded once: it moves to another stream next');
+});
+
+// ---- watching for the daily reward ---------------------------------------
+
+/** A farmer whose daily reward wants watching while `why.value` is null. */
+function rewardSetup(apiOptions, { top = [live('big', 90, 9000), live('pal', 91, 40)], storeOptions } = {}) {
+  const why = { value: null };
+  const ctx = setup(apiOptions, storeOptions, { rewardWatch: () => why.value });
+  ctx.api.top = top;
+  return { ...ctx, why };
+}
+
+test('with no drop to farm, a stream is watched for the daily reward: a followed one first, and not as farming', async () => {
+  const { farmer, watcher, history } = rewardSetup({ campaigns: [], followed: ['pal'] });
+  await farmer.tick();
+  assert.equal(watcher.watching, 'pal');
+  assert.equal(farmer.status.code, 'rewards');
+  assert.match(farmer.status.message, /Watching pal for the daily reward/);
+  assert.equal(farmer.current.reward, true);
+  assert.deepEqual(farmer.current.campaignIds, []);
+  assert.equal(farmer.snapshot().current.reward, true);
+  const start = history.all().find((e) => e.type === 'watch-start');
+  assert.equal(start.reward, true);
+  assert.match(start.text, /for the daily reward/);
+  assert.ok(history.all().some((e) => e.type === 'decision' && e.reward && /a channel you follow/.test(e.text)));
+  assert.equal(farmer.trayInfo().tone, 'farming');
+});
+
+test('the most watched stream when none you follow is live, leaving out a mature one', async () => {
+  const mature = { ...live('late', 92, 20000), is_mature: true };
+  const { farmer, watcher } = rewardSetup({ campaigns: [] }, { top: [mature, live('big', 90, 9000)] });
+  await farmer.tick();
+  assert.equal(watcher.watching, 'big');
+  assert.match(farmer.current.pickedWhy, /most watched/);
+});
+
+test('nothing live for the drops left: watches for the daily reward too, and goes to the drop once its stream is live', async () => {
+  const { farmer, watcher, api, history } = rewardSetup({ campaigns: [campaign('a')], streams: { 1: [live('dropper', 1)] } });
+  api.offline.add('dropper');
+  await farmer.tick();
+  assert.equal(watcher.watching, 'big');
+  api.offline.delete('dropper');
+  farmer.streams.clear();
+  await farmer.tick();
+  assert.equal(watcher.watching, 'dropper');
+  assert.equal(farmer.status.code, 'farming');
+  assert.ok(history.all().some((e) => e.type === 'watch-end' && e.reward && /A drop has a live stream/.test(e.reason)));
+});
+
+test('not watched for when rewardWatch says why (the setting, Stream Multiview, the reward earned), nor with nothing live', async () => {
+  const { farmer, watcher, why } = rewardSetup({ campaigns: [] });
+  why.value = 'Stream Multiview is watching Kick as you';
+  await farmer.tick();
+  assert.equal(watcher.watching, null);
+  assert.equal(farmer.status.code, 'done');
+
+  const none = rewardSetup({ campaigns: [] }, { top: [] });
+  await none.farmer.tick();
+  assert.equal(none.watcher.watching, null);
+  assert.equal(none.farmer.status.code, 'done');
+
+  // Off unless the app says so.
+  const plain = setup({ campaigns: [] });
+  plain.api.top = [live('big', 90, 9000)];
+  await plain.farmer.tick();
+  assert.equal(plain.watcher.watching, null);
+});
+
+test('Kick not listing streams leaves it standing by, and says so', async () => {
+  const { farmer, watcher, api } = rewardSetup({ campaigns: [] });
+  api.livestreams = async () => {
+    throw new Error('offline');
+  };
+  await farmer.tick();
+  assert.equal(watcher.watching, null);
+  assert.ok(farmer.log.some((l) => /Could not list live streams for the daily reward/.test(l.text)));
+});
+
+test('once the reward needn’t be watched for, the stream is left at the next check, or at once on rewardWatchChanged', async () => {
+  const { farmer, watcher, why, history } = rewardSetup({ campaigns: [] });
+  await farmer.tick();
+  assert.equal(watcher.watching, 'big');
+  why.value = 'The daily rewards are earned';
+  await farmer.tick();
+  assert.equal(watcher.watching, null);
+  assert.equal(farmer.status.code, 'done');
+  assert.ok(history.all().some((e) => e.type === 'watch-end' && e.reason === 'The daily rewards are earned'));
+
+  // Wanted again (a new day): picked at once, without waiting for the refresh.
+  why.value = null;
+  await farmer.rewardWatchChanged();
+  assert.equal(watcher.watching, 'big');
+  why.value = 'Stream Multiview is watching Kick as you';
+  await farmer.rewardWatchChanged();
+  assert.equal(watcher.watching, null);
+  assert.match(farmer.notice.text, /Left big: stream Multiview is watching Kick as you/);
+  // Nothing to do: no change.
+  await farmer.rewardWatchChanged();
+  assert.equal(watcher.watching, null);
+});
+
+test('rewardWatchChanged leaves a drop being farmed alone, and waits while paused or busy', async () => {
+  const { farmer, watcher, why } = rewardSetup({ campaigns: [campaign('a')], streams: { 1: [live('dropper', 1)] } });
+  await farmer.tick();
+  assert.equal(watcher.watching, 'dropper');
+  why.value = 'Watch for daily rewards is off';
+  await farmer.rewardWatchChanged();
+  assert.equal(watcher.watching, 'dropper');
+
+  const idle = rewardSetup({ campaigns: [] });
+  idle.why.value = 'off';
+  await idle.farmer.tick();
+  idle.why.value = null;
+  idle.farmer.ticking = true;
+  await idle.farmer.rewardWatchChanged();
+  assert.equal(idle.watcher.watching, null);
+  idle.farmer.ticking = false;
+  idle.farmer.paused = true;
+  await idle.farmer.rewardWatchChanged();
+  assert.equal(idle.watcher.watching, null);
+});
+
+test('watching for the daily reward: no conflict alarm, no stall, but an offline stream is left and a stuck player reloaded', async () => {
+  const { farmer, watcher, api } = rewardSetup({ campaigns: [] });
+  await farmer.tick();
+  const alerts = [];
+  farmer.on('stall-alert', (a) => alerts.push(a));
+  for (let i = 0; i < 4; i++) watcher.emit('watch-event', { t: Date.now() });
+  assert.equal(alerts.length, 0);
+  assert.equal(farmer.eventsSinceCredit, 0);
+
+  farmer.current.lastProgressAt = Date.now() - 60 * MIN;
+  await farmer.tick();
+  assert.equal(watcher.watching, 'big', 'no drop credit to stall');
+
+  watcher.status.loadedAt = Date.now() - 5 * MIN;
+  watcher.status.lastAdvanceAt = Date.now() - 5 * MIN;
+  farmer.current.lastReloadAt = null;
+  await farmer.tick();
+  assert.equal(watcher.reloads, 1);
+
+  api.offline.add('big');
+  await farmer.tick();
+  assert.equal(watcher.watching, 'pal');
+});
+
+test('time watched for the daily reward is kept apart from the drops’ watch time', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+  const { farmer } = rewardSetup({ campaigns: [] });
+  await farmer.tick();
+  t.mock.timers.tick(10 * MIN);
+  farmer.accumulateWatchTime();
+  assert.equal(farmer.stats.watchMs, 0);
+  assert.ok(farmer.stats.rewardWatchMs >= 10 * MIN);
+});
+
+test('Why isn’t this farming? says a stream watched for the daily reward moves to a drop’s', async () => {
+  const { farmer, api } = rewardSetup({ campaigns: [campaign('a')], streams: { 1: [live('dropper', 1)] } });
+  api.offline.add('dropper');
+  await farmer.tick();
+  api.offline.delete('dropper');
+  farmer.streams.clear();
+  await farmer.refresh({});
+  const pick = farmer.explain().checks.find((c) => c.step === 'pick');
+  assert.match(pick.note, /For the daily reward/);
 });

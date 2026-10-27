@@ -284,3 +284,22 @@ test('the History view reads its range once, then only what was recorded since',
   assert.equal(history.view({ now, since: now - 30 * MIN }).totals.credited, 2, 'another range is read afresh');
   assert.equal(read.at(-1).after, 0);
 });
+
+test('a session watched for the daily reward counts as watch time, but not against the drops’ efficiency', () => {
+  const { history } = fresh();
+  const now = Date.now();
+  session(history, { start: now - 3 * 3600_000, minutes: 60, credits: 30 });
+  const reward = { session: 'r', slug: 'nightowl', channel: 'NightOwl', campaignIds: [], reward: true };
+  history.add('watch-start', { t: now - 2 * 3600_000, ...reward, campaigns: [] });
+  history.add('watch-end', { t: now - 3600_000, ...reward, reason: 'The daily rewards are earned' });
+  const v = history.view({ now });
+  const s = v.sessions.find((x) => x.session === 'r');
+  assert.equal(s.reward, true);
+  assert.equal(s.efficiency, null);
+  assert.equal(v.totals.watchMs, 120 * MIN);
+  assert.equal(v.totals.efficiency, 1, 'the drop session’s alone');
+  const owl = v.channels.find((c) => c.slug === 'nightowl');
+  assert.equal(owl.watchMs, 60 * MIN);
+  assert.equal(owl.efficiency, null);
+  assert.equal('dropMs' in owl, false);
+});
