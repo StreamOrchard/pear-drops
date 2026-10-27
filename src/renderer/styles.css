@@ -6806,6 +6806,7 @@ button.status-pill:hover {
 }
 .player-foot .sound-btn.on {
   color: var(--green);
+}
 /* Change stream, watching for the daily reward: the live streams to pick from. */
 .modal.reward-streams {
   width: min(520px, 92vw);

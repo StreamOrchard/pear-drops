@@ -447,9 +447,11 @@ function rewardStreamsModal() {
   const r = ui.rewardStreams ?? {};
   const f = farm();
   const off = !f?.current?.reward;
+  // "Your language" only says something when some of them aren't.
+  const mixed = r.list?.some((s) => s.mine) && r.list.some((s) => !s.mine);
   const row = (s) => `<div class="rs-row ${s.watching ? 'on' : ''}">
       ${img(s.avatar, 'avatar')}
-      <span class="rs-txt"><span class="rs-name"><b>${esc(s.username)}</b>${s.followed ? icon('heart') : ''}${s.mine ? '<span class="chip flat tiny">Your language</span>' : ''}</span>
+      <span class="rs-txt"><span class="rs-name"><b>${esc(s.username)}</b>${s.followed ? icon('heart') : ''}${s.mine && mixed ? '<span class="chip flat tiny">Your language</span>' : ''}</span>
         <span class="rs-sub">${esc([s.category, `${fmtCount(s.viewers)} watching`].filter(Boolean).join(' · '))}</span></span>
       ${
         s.watching
