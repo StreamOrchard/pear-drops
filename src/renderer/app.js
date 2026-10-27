@@ -2,6 +2,7 @@
 
 let state = null;
 const ui = {
+  rewardStreams: null, // Change stream (watching for the daily reward): { list, error, picking }, while its dialog is open
   selectedCategory: null,
   chartCampaign: null,
   expanded: new Set(),
@@ -407,7 +408,7 @@ function renderRewardHero(f, cur) {
           <div class="title">${esc(cur.title ?? '')}</div>
           <div class="hero-actions">
             <button class="btn sm" data-action="reload" data-tip="Reload the player">${icon('reload')} Reload</button>
-            <button class="btn sm" data-action="skip" data-tip="Switch to another stream">${icon('skip')} Skip stream</button>
+            <button class="btn sm" data-action="reward-streams" data-tip="Pick the stream to watch for daily rewards">${icon('skip')} Change stream</button>
           </div>
         </div>
         <div class="hero-rewards ${roomy ? 'roomy' : ''}">${filling.slice(0, 3).map(crateLine).join('')}</div>
@@ -426,6 +427,48 @@ function renderRewardHero(f, cur) {
     ${noticeHTML(f)}
     <div class="hero-stall"><span>Any stream fills them. A drop with a live stream comes first.</span></div>`,
   );
+}
+
+/** Change stream: opens the dialog and asks for the streams to pick from. */
+async function openRewardStreams() {
+  ui.rewardStreams = { list: null, error: null, picking: null };
+  openModal('reward-streams');
+  const list = await window.pd.rewardStreams().catch(() => null);
+  if (ui.modal !== 'reward-streams') return;
+  ui.rewardStreams = { ...ui.rewardStreams, list, error: list ? null : 'Kick didn’t list its live streams. Try again in a moment.' };
+  render();
+}
+
+/**
+ * The dialog: live streams to watch for the daily reward, best first (channels you follow, your
+ * language, the most watched), the one being watched at the top. Any of them fills the crates.
+ */
+function rewardStreamsModal() {
+  const r = ui.rewardStreams ?? {};
+  const f = farm();
+  const off = !f?.current?.reward;
+  const row = (s) => `<div class="rs-row ${s.watching ? 'on' : ''}">
+      ${img(s.avatar, 'avatar')}
+      <span class="rs-txt"><span class="rs-name"><b>${esc(s.username)}</b>${s.followed ? icon('heart') : ''}${s.mine ? '<span class="chip flat tiny">Your language</span>' : ''}</span>
+        <span class="rs-sub">${esc([s.category, `${fmtCount(s.viewers)} watching`].filter(Boolean).join(' · '))}</span></span>
+      ${
+        s.watching
+          ? '<span class="chip green tiny"><span class="live-dot green"></span>Watching</span>'
+          : `<button class="btn sm" data-action="reward-watch" data-slug="${esc(s.slug)}" ${r.picking || off ? 'disabled' : ''}>${r.picking === s.slug ? '<span class="spinner xs"></span>' : icon('play')} Watch</button>`
+      }
+    </div>`;
+  const body = off
+    ? '<div class="rs-empty">Pear Drops isn’t watching for the daily reward now.</div>'
+    : r.list
+      ? `${r.error ? `<div class="rs-error">${icon('alert')}${esc(r.error)}</div>` : ''}<div class="rs-list">${r.list.map(row).join('')}</div>`
+      : `<div class="rs-empty">${r.error ? esc(r.error) : '<div class="spinner"></div>'}</div>`;
+  return `<div class="modal-backdrop" data-action="close-modal">
+    <div class="modal reward-streams" data-stop role="dialog" aria-modal="true" aria-labelledby="rs-title">
+      <div class="modal-head"><h3 id="rs-title">Watch for daily rewards</h3><button class="btn sm icon-only ghost" data-action="close-modal" data-tip="Close (Esc)">${icon('x')}</button></div>
+      <div class="modal-section">${body}</div>
+      <div class="modal-foot"><span class="rs-foot">Any live stream fills the crates. A drop’s stream comes first when one is live.</span></div>
+    </div>
+  </div>`;
 }
 
 // ------------------------------------------------------------------ stats
@@ -1557,6 +1600,7 @@ function renderModal() {
   const root = $('#modal-root');
   if (ui.modal === 'whatsnew') return setHTML(root, whatsNewModal());
   if (ui.modal === 'why') return setHTML(root, whyModal());
+  if (ui.modal === 'reward-streams') return setHTML(root, rewardStreamsModal());
   if (ui.modal !== 'settings') return setHTML(root, '');
   const s = state.settings;
   const user = state.auth.user;
@@ -1708,6 +1752,7 @@ function closeModal() {
   act.app = null;
   dev.data = null; // Settings › Developer: fetched afresh when it opens again
   dev.why = null;
+  ui.rewardStreams = null;
   render();
 }
 
@@ -1882,6 +1927,20 @@ const actions = {
   skip: () => window.pd.skip(),
   reload: () => window.pd.reload(),
   sound: () => window.pd.setSound(!farm()?.player?.sound),
+  'reward-streams': () => openRewardStreams(),
+  'reward-watch': async (el) => {
+    const slug = el.dataset.slug;
+    ui.rewardStreams = { ...ui.rewardStreams, picking: slug, error: null };
+    render();
+    try {
+      await window.pd.watchRewardStream(slug);
+      closeModal();
+    } catch {
+      if (ui.modal !== 'reward-streams') return;
+      ui.rewardStreams = { ...ui.rewardStreams, picking: null, error: 'That stream couldn’t be watched. It may have gone offline.' };
+      render();
+    }
+  },
   settings: () => openModal('settings'),
   'close-modal': () => closeModal(),
   palette: () => palette.toggle(),

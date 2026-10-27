@@ -1405,16 +1405,39 @@ class Farmer extends EventEmitter {
   async watchForReward() {
     const why = this.rewardWatch();
     if (why) return false;
-    let list = [];
+    let streams;
     try {
-      list = await this.api.livestreams(undefined, { maxPages: 1, limit: 50 });
+      streams = await this.rewardCandidates();
     } catch (err) {
       this.addLog('warn', `Could not list live streams for the daily reward: ${err.message}`);
       return false;
     }
+    const stream = streams[0];
+    if (!stream) return false;
+    const reason = stream.followed ? 'a channel you follow' : `the most watched on Kick${stream.mine ? ' in your language' : ''} (${stream.viewers} viewers)`;
+    const text = `Picked ${stream.username} for the daily reward: no drop to watch, ${reason}`;
+    this.addLog('info', text);
+    this.record('decision', { slug: stream.slug, channel: stream.username, avatar: stream.avatar, reward: true, text });
+    this.lastCreditAt = null;
+    this.eventsSinceCredit = 0;
+    this.startWatching(stream, this.rewardRow(stream), [], false, { reward: true, why: reason });
+    return true;
+  }
+
+  /** The queue row a stream watched for the daily reward stands in for: none, so made up. */
+  rewardRow(stream) {
+    return { id: null, categoryId: stream.category?.id ?? null, name: 'the daily reward', category: { name: stream.category?.name ?? '' } };
+  }
+
+  /**
+   * Live streams for the daily reward, best first: the channels you follow, then the computer's
+   * language, then the most watched (none marked mature unless you follow it, none skipped).
+   */
+  async rewardCandidates() {
+    const list = await this.api.livestreams(undefined, { maxPages: 1, limit: 50 });
     const now = Date.now();
     const lang = String(this.language() ?? '').toLowerCase().split(/[-_]/)[0];
-    const streams = list
+    this.rewardPicks = list
       .filter((ls) => ls?.channel?.slug && (this.blacklist.get(ls.channel.slug) ?? 0) <= now)
       .map((ls) => ({
         slug: ls.channel.slug,
@@ -1431,16 +1454,47 @@ class Farmer extends EventEmitter {
       }))
       .filter((s) => s.followed || !s.mature)
       .sort((a, b) => Number(b.followed) - Number(a.followed) || Number(b.mine) - Number(a.mine) || b.viewers - a.viewers);
-    const stream = streams[0];
-    if (!stream) return false;
-    const reason = stream.followed ? 'a channel you follow' : `the most watched on Kick${stream.mine ? ' in your language' : ''} (${stream.viewers} viewers)`;
-    const text = `Picked ${stream.username} for the daily reward: no drop to watch, ${reason}`;
-    this.addLog('info', text);
+    return this.rewardPicks;
+  }
+
+  /**
+   * Change stream (watching for the daily reward): the streams to pick from, as the dialog lists
+   * them, the one being watched first. Null when it isn't watching for the daily reward, or Kick
+   * didn't answer.
+   */
+  async rewardStreams(max = 8) {
+    const cur = this.current;
+    if (!cur?.reward) return null;
+    let list;
+    try {
+      list = await this.rewardCandidates();
+    } catch (err) {
+      this.addLog('warn', `Could not list live streams for the daily reward: ${err.message}`);
+      return null;
+    }
+    const row = (s, watching = false) => ({ slug: s.slug, username: s.username, avatar: s.avatar ?? null, title: s.title ?? '', viewers: s.viewers ?? 0, category: s.category?.name ?? s.categoryName ?? '', followed: !!s.followed, mine: !!s.mine, watching });
+    const others = list.filter((s) => s.slug !== cur.slug).slice(0, max - 1);
+    return [row(list.find((s) => s.slug === cur.slug) ?? cur, true), ...others.map((s) => row(s))];
+  }
+
+  /**
+   * A stream picked in Change stream, watched for the daily reward instead: one the dialog listed
+   * (rewardStreams), only while watching for the daily reward. A drop with a live stream still
+   * comes first.
+   */
+  async watchRewardStream(slug) {
+    const cur = this.current;
+    if (!cur?.reward) throw new Error('Not watching for the daily reward');
+    if (cur.slug === slug) return;
+    const stream = (this.rewardPicks ?? []).find((s) => s.slug === slug) ?? (await this.rewardCandidates()).find((s) => s.slug === slug);
+    if (!stream) throw new Error('That stream is no longer live');
+    const text = `Switched to ${stream.username} for the daily reward (picked by you)`;
+    this.addLog('switch', text);
     this.record('decision', { slug: stream.slug, channel: stream.username, avatar: stream.avatar, reward: true, text });
-    this.lastCreditAt = null;
-    this.eventsSinceCredit = 0;
-    this.startWatching(stream, { id: null, categoryId: stream.category?.id ?? null, name: 'the daily reward', category: { name: stream.category?.name ?? '' } }, [], false, { reward: true, why: reason });
-    return true;
+    this.stopWatching(`Switched to ${stream.username} by you`);
+    this.blacklist.delete(slug);
+    this.startWatching(stream, this.rewardRow(stream), [], true, { reward: true });
+    this.changed();
   }
 
   /**

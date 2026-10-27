@@ -570,6 +570,16 @@ function initPaletteItems() {
     // The button by the stream: one or the other, as the sound is.
     { id: 'sound-on', group: 'Farming', title: 'Unmute the stream', sub: () => `Hear ${f().current.username}. Muted again at the next launch`, words: ['sound', 'audio', 'volume', 'hear'], icon: 'volume', when: () => !!f()?.current && !f().player?.sound, run: () => runAction('sound'), done: 'Sound on' },
     { id: 'sound-off', group: 'Farming', title: 'Mute the stream', sub: () => f().current.username, words: ['sound', 'audio', 'volume', 'silence'], icon: 'volumeOff', when: () => !!f()?.current && !!f().player?.sound, run: () => runAction('sound'), done: 'Sound off' },
+    {
+      id: 'reward-streams',
+      group: 'Farming',
+      title: 'Change the stream for daily rewards',
+      sub: () => `Watching ${f().current.username}: pick another live stream`,
+      words: ['daily reward', 'event', 'crate', 'switch stream', 'pick stream', 'channel'],
+      icon: 'skip',
+      when: () => !!f()?.current?.reward,
+      run: () => runAction('reward-streams'),
+    },
     { id: 'reload', group: 'Farming', title: 'Reload the stream', sub: () => f().current.username, words: ['refresh player'], icon: 'reload', when: () => !!f()?.current, run: () => runAction('reload'), done: 'Reloading the stream', keep: true, keepGroup: 'Now', keepNote: nowNote },
     {
       id: 'refresh',

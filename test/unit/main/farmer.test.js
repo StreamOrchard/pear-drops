@@ -1584,3 +1584,67 @@ test('Why isn’t this farming? says a stream watched for the daily reward moves
   const pick = farmer.explain().checks.find((c) => c.step === 'pick');
   assert.match(pick.note, /For the daily reward/);
 });
+
+test('Change stream: the streams for the daily reward, the one watched first, in the same order it picks', async () => {
+  const lang = (slug, id, viewers, language) => ({ ...live(slug, id, viewers), language, category: { id: 7, name: 'Just Chatting' } });
+  const top = [lang('hola', 93, 30000, 'es'), lang('hello', 95, 900, 'en'), lang('pal', 91, 40, 'es'), lang('quiet', 96, 10, 'en')];
+  const { farmer, watcher } = rewardSetup({ campaigns: [], followed: ['pal'] }, { top });
+  farmer.language = () => 'en';
+  assert.equal(await farmer.rewardStreams(), null, 'only while watching for the daily reward');
+  await farmer.tick();
+  assert.equal(watcher.watching, 'pal');
+  const list = await farmer.rewardStreams(3);
+  assert.deepEqual(
+    list.map((s) => [s.slug, s.watching, s.followed, s.mine]),
+    [
+      ['pal', true, true, false],
+      ['hello', false, false, true],
+      ['quiet', false, false, true],
+    ],
+  );
+  assert.equal(list[1].category, 'Just Chatting');
+});
+
+test('Change stream: a stream picked is watched for the daily reward, by you, and History says so', async () => {
+  const { farmer, watcher, history } = rewardSetup({ campaigns: [] });
+  await farmer.tick();
+  assert.equal(watcher.watching, 'big');
+  await farmer.rewardStreams();
+  await farmer.watchRewardStream('pal');
+  assert.equal(watcher.watching, 'pal');
+  assert.equal(farmer.current.reward, true);
+  assert.equal(farmer.current.manual, true);
+  assert.equal(farmer.status.code, 'rewards');
+  assert.ok(history.all().some((e) => e.type === 'decision' && e.reward && /Switched to pal for the daily reward \(picked by you\)/.test(e.text)));
+  assert.ok(history.all().some((e) => e.type === 'watch-end' && e.slug === 'big' && /by you/.test(e.reason)));
+  // The same one again: nothing to do. One no longer live, or not watching for the reward: refused.
+  await farmer.watchRewardStream('pal');
+  assert.equal(history.all().filter((e) => e.type === 'watch-start').length, 2);
+  await assert.rejects(farmer.watchRewardStream('gone'), /no longer live/);
+  farmer.rewardPicks = null;
+  await farmer.watchRewardStream('big');
+  assert.equal(watcher.watching, 'big', 'asks Kick again when it has no list');
+  farmer.stopWatching('test');
+  await assert.rejects(farmer.watchRewardStream('pal'), /Not watching for the daily reward/);
+});
+
+test('Change stream: Kick not listing streams gives no list, and says so', async () => {
+  const { farmer, api } = rewardSetup({ campaigns: [] });
+  await farmer.tick();
+  api.livestreams = async () => {
+    throw new Error('offline');
+  };
+  assert.equal(await farmer.rewardStreams(), null);
+  assert.ok(farmer.log.some((l) => /Could not list live streams for the daily reward/.test(l.text)));
+});
+
+test('a stream picked for the daily reward still gives way to a drop’s stream', async () => {
+  const { farmer, watcher, api } = rewardSetup({ campaigns: [campaign('a')], streams: { 1: [live('dropper', 1)] } });
+  api.offline.add('dropper');
+  await farmer.tick();
+  await farmer.watchRewardStream('pal');
+  api.offline.delete('dropper');
+  farmer.streams.clear();
+  await farmer.tick();
+  assert.equal(watcher.watching, 'dropper');
+});
