@@ -2,7 +2,16 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.29 (current)
+## 0.1.30 (current)
+- Ready for Electron 45: Connected apps' pairing keys use the system keychain's async methods
+- Connected apps' pairing keys are saved again with the system's new key when the keychain changes it
+- History's charts follow the clock when it goes back or forward: the hour that comes round twice gets its own bar, and each day starts at midnight
+- With no drop to farm, Pear Drops watches a stream for Kick's daily reward and event crates (unless Stream Multiview is watching as you)
+- Watching for daily rewards: a stream in your language comes first
+- Unmute the stream: a Mute / Unmute button beside it (muted again at every launch)
+- Change stream: pick the stream watched for daily rewards from a list
+
+## 0.1.29
 - The Search button in the title bar opens the search box when clicked again
 - The search box lists each reward of a finished drop once, not twice
 
