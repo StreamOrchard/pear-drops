@@ -15,6 +15,28 @@ test('the stand-in server credits only campaigns the watched channel counts for'
   assert.equal(api.units['c-cozy'], before['c-cozy'] + 2);
 });
 
+test("the big drop: an organiser's raffle on forty channels, its own among them, credited on any of its live ones", async () => {
+  const { api } = createDemo();
+  assert.ok(!(await api.campaigns()).some((c) => c.id === 'c-raffle'), 'only when a test or a capture adds it');
+  api.addBigDrop(10);
+  api.addBigDrop(10);
+  const raffles = (await api.campaigns()).filter((c) => c.id === 'c-raffle');
+  assert.equal(raffles.length, 1, 'added once');
+  const [c] = raffles;
+  assert.equal(c.rewards.length, 11);
+  assert.deepEqual(c.rewards.map((r) => r.required_units), [60, 120, 180, 240, 300, 600, 900, 1200, 1500, 1800, 2100]);
+  assert.equal(c.channels.length, 40);
+  assert.ok(c.channels.some((ch) => ch.slug === 'arcadia'), "its organiser's own channel");
+  const ids = c.channels.map((ch) => ch.id);
+  assert.deepEqual(ids, [...ids].sort((a, b) => a - b), 'listed by id, as Kick does');
+  assert.match(c.connect_url, /^https:\/\//);
+  api.creditWatch('kitekat');
+  assert.equal(api.units['c-raffle'], 12);
+  const progress = (await api.progress()).find((p) => p.id === 'c-raffle');
+  assert.equal(progress.progress_units, 12);
+  assert.equal((await api.channelInfo('brightbyte')).livestream, null, 'a co-streamer, offline');
+});
+
 test('a conflict stops credit, and offline channels leave the live list', async () => {
   const { api } = createDemo();
   api.conflict = true;

@@ -642,6 +642,12 @@ function setupDemo() {
       while (farmer.ticking) await new Promise((r) => setTimeout(r, 50));
       await farmer.tick();
     },
+    /** A big drop: an organiser's raffle, eleven rewards on dozens of channels, with a page to link your account on. */
+    bigDrop: async (units) => {
+      demo.api.addBigDrop(units);
+      while (farmer.ticking) await new Promise((r) => setTimeout(r, 50));
+      await farmer.tick({ force: true });
+    },
     /** Kick stops listing a drop (it ended or was taken down), and re-check. */
     endDrop: async (campaignId) => {
       demo.api.endCampaign(campaignId);
@@ -1066,6 +1072,20 @@ app.whenReady().then(async () => {
   // Once, from an older version's files.
   const imported = db.importFiles(app.getPath('userData'));
   security = await setupSecurity(() => store.get().forgetOnQuit, db.slot('security'), { closePages: closeKickPages });
+  // The system keychain, for Connected apps' pairing keys. Asked before the window opens: from
+  // there to registerIpc() nothing may wait, or the page's first questions (What's new, its
+  // state) come before anything can answer them. (PD_TEST_SLOW_KEYCHAIN: a slow one, in a test.)
+  const slowKeychain = Number(env('PD_TEST_SLOW_KEYCHAIN')) || 0;
+  if (slowKeychain) await new Promise((r) => setTimeout(r, slowKeychain));
+  const crypt = (await safeStorage.isAsyncEncryptionAvailable())
+    ? {
+        encrypt: async (t) => (await safeStorage.encryptStringAsync(t)).toString('base64'),
+        decrypt: async (t) => {
+          const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(t, 'base64'));
+          return { text: result, reEncrypt: shouldReEncrypt }; // saved again with the system's new key
+        },
+      }
+    : {};
   api = DEMO ? demo.api : new KickApi();
   api.keepAnswers = developerTools();
   api.onRequest = (r) => {
@@ -1143,15 +1163,6 @@ app.whenReady().then(async () => {
   // they never see (or pair with) the apps you really use; GRAPEVINE_DIR still wins, to try one
   // with a developer copy of Stream Multiview.
   linkDir = env('GRAPEVINE_DIR') || (DEMO || env('PD_DEV_DATA') ? path.join(app.getPath('userData'), 'grapevine') : null);
-  const crypt = (await safeStorage.isAsyncEncryptionAvailable())
-    ? {
-        encrypt: async (t) => (await safeStorage.encryptStringAsync(t)).toString('base64'),
-        decrypt: async (t) => {
-          const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(t, 'base64'));
-          return { text: result, reEncrypt: shouldReEncrypt }; // saved again with the system's new key
-        },
-      }
-    : {};
   connected = new Connected({
     store,
     farmer,

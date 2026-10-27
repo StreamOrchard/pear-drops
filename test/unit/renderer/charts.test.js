@@ -92,6 +92,40 @@ test('progressChart draws history, a forecast with reward markers, and stays fin
   assert.ok(!svg.includes('Skin'), 'game drops are not marked');
 });
 
+test("progressChart: rewards close together share a marker, and no two labels overlap", () => {
+  const now = Date.now();
+  const hours = [60, 120, 180, 240, 300, 600, 900, 1200, 1500, 1800, 2100];
+  const rewards = hours.map((m, i) => ({ name: `Raffle ${i + 1}`, required: m, tracked: true, image: 'data:image/png;base64,AA' }));
+  const boxes = (svg) => [...svg.matchAll(/<g class="pill[^"]*">\s*<rect x="([\d.-]+)" y="([\d.-]+)" width="(\d+)" height="(\d+)"/g)].map((m) => ({ l: +m[1], t: +m[2], r: +m[1] + +m[3], b: +m[2] + +m[4] }));
+  for (const [width, height] of [[720, 500], [520, 260], [300, 150]]) {
+    ctx.many = { points: [[now - 12 * MIN, 0], [now, 10]], rewards, target: 2100, now, rate: 0.64, width, height };
+    const svg = run('progressChart(many)');
+    assert.ok(!/NaN|Infinity/.test(svg));
+    const placed = boxes(svg);
+    for (let i = 0; i < placed.length; i++)
+      for (let j = i + 1; j < placed.length; j++) {
+        const [a, b] = [placed[i], placed[j]];
+        assert.ok(a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t, `labels ${i} and ${j} overlap at ${width}×${height}`);
+      }
+    assert.match(svg, /Done /, `the final label always shows at ${width}×${height}`);
+    // Nor on a marker (other than its own, which it sits beside).
+    const marks = [...svg.matchAll(/class="m-ring[^"]*"/g)].length;
+    const rings = [...svg.matchAll(/<circle cx="([\d.-]+)" cy="([\d.-]+)" r="13.5" class="m-ring/g)].map((m) => ({ x: +m[1], y: +m[2] }));
+    assert.equal(rings.length, marks);
+    for (let i = 1; i < rings.length; i++) assert.ok(Math.hypot(rings[i].x - rings[i - 1].x, rings[i].y - rings[i - 1].y) >= 30, `markers ${i - 1} and ${i} apart at ${width}×${height}`);
+    for (const b of placed) for (const m of rings) assert.ok(b.r <= m.x - 12 || m.x + 12 <= b.l || b.b <= m.y - 12 || m.y + 12 <= b.t, `a label on a marker at ${width}×${height}`);
+    // Every reward is in a marker's tooltip, once.
+    const tips = [...svg.matchAll(/class="m-reward" data-tip="([^"]*)"/g)].flatMap((m) => m[1].split('\n'));
+    assert.equal(tips.length, hours.length);
+  }
+  ctx.many = { points: [[now - 12 * MIN, 0], [now, 10]], rewards, target: 2100, now, rate: 0.64, width: 720, height: 500 };
+  const svg = run('progressChart(many)');
+  assert.match(svg, /class="m-more"/, 'the first hours share a marker');
+  assert.match(svg, /\d rewards · /, 'and a label saying how many');
+  ctx.many.resume = true;
+  assert.match(run('progressChart(many)'), /\d rewards · .*– ?.* in|Done .* after resuming/, 'paused: how long after resuming');
+});
+
 test('progressChart in history mode has no forecast, and copes with one point', () => {
   ctx.one = { points: [[Date.now(), 5]], rewards: [], target: 60, now: Date.now(), rate: 0, forecast: false, width: 300, height: 150 };
   const svg = run('progressChart(one)');

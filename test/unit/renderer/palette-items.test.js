@@ -108,6 +108,22 @@ const runs = (f) => {
 };
 test.beforeEach(() => (farm = farmState()));
 
+test("a drop that asks you to link your Kick account somewhere has a command for it; its picture is its own channel's, or with many channels, its reward", () => {
+  const chans = ['theunknown', 'starladder', 'bandurka', 'gaules'].map((slug, i) => ({ id: i + 1, slug, username: slug, avatar: `pd-img://av/${slug}.webp` }));
+  const sl = category('ch:1,2,3,4', 'Counter-Strike 2', [campaign('c-sl', 'Stake Ranked PC Giveaway 5', 10, [reward('r-sl1', 'Stake PC Raffle - 1 Ticket - 1 Hour', 60, { kind: 'game' })], { connectUrl: 'https://drops.starladder.com/', channels: chans })], { kind: 'channels', channels: chans });
+  farm.categories.push(sl);
+  const connect = [...find('drop:ch:1,2,3,4').more()].find((x) => x.title === 'Connect your Kick account');
+  assert.equal(connect.sub, 'drops.starladder.com');
+  assert.deepEqual(runs(() => connect.run()), [['open-link', { url: 'https://drops.starladder.com/' }]]);
+  assert.ok(![...find('drop:801').more()].some((x) => x.title === 'Connect your Kick account'), 'not on a drop without one');
+  assert.equal(find('drop:ch:1,2,3,4').image, 'pd-img://drop/r-sl1.svg', 'four channels, none its own: its reward');
+  chans[1].host = true;
+  sl.channels = [chans[1], ...chans.filter((c) => c !== chans[1])];
+  assert.equal(find('drop:ch:1,2,3,4').image, 'pd-img://av/starladder.webp', "its own channel's");
+  sl.channels = chans.slice(0, 3).map((c) => ({ ...c, host: false }));
+  assert.equal(find('drop:ch:1,2,3,4').image, 'pd-img://av/theunknown.webp', 'three channels: the first');
+});
+
 test('a drop’s big row: its buttons follow what it’s doing', () => {
   assert.deepEqual(labels(find('drop:801')), ['Show in queue', 'Skip stream', 'Switch it off', 'In History', 'More…'], 'being farmed');
   assert.deepEqual(labels(find('drop:802')), ['Claim', 'Farm it now', 'Farm it first', 'Switch it off', 'In History', 'More…'], 'a reward to claim, live channels to watch');

@@ -203,6 +203,30 @@ function makeCampaigns() {
   ];
 }
 
+// A big drop, as an esports organiser runs one (pdDemo.bigDrop()): raffle tickets every hour then
+// every five, on its own channel (arcadia, for Arcadia Esports) and dozens of co-streamers', most
+// of them offline, with a page to link your Kick account on.
+const COSTREAMERS = 'brightbyte cobaltcat dunewalker echoleaf fernfrost gildedgoose harborhawk inkwell junipercast kelpking lumenlark marblemoth nimbusnox oakenowl pebblepop quillquake rustyraven saltsprite tinseltoad umbraurchin velvetvole willowisp xenonyak yarrowyeti zephyrzebra ambermink birchbadger cindercrane dewdrop driftdrake emberelk flintfinch glowgecko hazelhare'
+  .split(' ')
+  .map((slug, i) => ({ id: 9300 + i, slug, user: { username: slug[0].toUpperCase() + slug.slice(1), profile_picture: avatar(slug, (i * 37) % 360) } }));
+
+function bigDrop() {
+  const hours = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35];
+  return {
+    id: 'c-raffle',
+    url: 'https://example.com/arcadia-raffle',
+    name: 'Arcadia Cup PC Raffle',
+    status: 'active',
+    starts_at: days(-0.1),
+    ends_at: days(4),
+    category: CATEGORIES.neon,
+    organization: { id: 'org-arcadia', name: 'Arcadia Esports LTD', logo_url: emote('⭐', 0), url: 'https://example.com/arcadia', restricted: false },
+    connect_url: 'https://example.com/arcadia-connect',
+    channels: [...['emberfox', 'kitekat', 'arcadia', 'novaquinn', 'glitchgarden', 'pixelpear'].map((s) => ({ id: ch(s).id, slug: s, user: { username: ch(s).username, profile_picture: ch(s).avatar } })), ...COSTREAMERS].sort((a, b) => a.id - b.id),
+    rewards: hours.map((h, i) => reward(`r-raffle-${i + 1}`, `PC Raffle - ${h < 5 ? 1 : h === 5 ? 5 : 10} Ticket${h < 5 ? '' : 's'} - ${h} H`, h * 60, '🎟️', 350)),
+  };
+}
+
 const LIVE = {
   [CATEGORIES.neon.id]: [
     ['pixelpear', 'Ranked grind to Neon Legend — drops on! 🏎️', 4210],
@@ -639,6 +663,12 @@ class DemoApi {
   async signOut({ closePages } = {}) {
     await closePages?.();
     this.loggedIn = false;
+  }
+
+  /** The big drop (bigDrop), listed with `units` watched. */
+  addBigDrop(units = 10) {
+    if (!this.rawCampaigns.some((c) => c.id === 'c-raffle')) this.rawCampaigns.push(bigDrop());
+    this.units['c-raffle'] = units;
   }
 
   /** Kick stops listing a campaign (it ended, or was taken down). */

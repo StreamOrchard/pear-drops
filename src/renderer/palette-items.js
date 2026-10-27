@@ -1,4 +1,4 @@
-/* global commands, palette, actions, state, ui, farm, dailyReward, currentCampaigns, categoryEta, trackedRewards, channelNames, alarm, upd, dev, devOn, act, hist, SETTINGS_TABS, SETTINGS_ROWS, NOTIFY_KINDS, settingValue, settingWords, openSettings, openSide, openHistory, openModal, openReward, render, crateList, icon, img, esc, fmtMin, fmtDur, fmtEnds, fmtCount, signedInPlayers */
+/* global commands, palette, actions, state, ui, farm, dailyReward, currentCampaigns, categoryEta, trackedRewards, channelNames, rowImage, alarm, upd, dev, devOn, act, hist, SETTINGS_TABS, SETTINGS_ROWS, NOTIFY_KINDS, settingValue, settingWords, openSettings, openSide, openHistory, openModal, openReward, render, crateList, icon, img, esc, fmtMin, fmtDur, fmtEnds, fmtCount, signedInPlayers */
 // What the search box (Ctrl/⌘+K, palette.js) finds in Pear Drops: every drop, reward and channel, every action, every
 // tab and filter by name, and Settings' options. A button with a data-action gets a command here that runs the same
 // action (runAction), so the button and the box can't do different things. The palette-coverage tests (unit and
@@ -54,6 +54,8 @@ function dropItem(cat, { lit = null } = {}) {
   const show = () => openSide('queue', { category: cat.id });
   const history = () => openHistory({ campaign: lead?.id ?? null });
   const page = lead?.url ? () => runAction('open-link', { url: lead.url }) : null;
+  const connectUrl = camps.find((c) => c.connectUrl)?.connectUrl;
+  const connect = connectUrl ? () => runAction('open-link', { url: connectUrl }) : null;
   const live = (cat.streams ?? []).filter((s) => !s.blocked);
   const watch = live[0] ? () => runAction('watch', { slug: live[0].slug, cat: String(cat.id) }) : null;
   const toTop = () => {
@@ -76,7 +78,7 @@ function dropItem(cat, { lit = null } = {}) {
     group: 'Drops',
     title,
     words: [cat.name, cat.category?.name, ...camps.map((c) => c.name), ...cat.channels.map((c) => c.username)].filter((w) => w && w !== title),
-    image: cat.kind === 'category' ? cat.image : (cat.channels[0]?.avatar ?? cat.image),
+    image: rowImage(cat),
     round: cat.kind !== 'category',
     pills: [st],
     sub: [where, lead ? minutes({ required: max }, lead.units) : '', st.text === 'Farming' ? '' : st.text],
@@ -121,6 +123,7 @@ function dropItem(cat, { lit = null } = {}) {
       currentCampaigns().some((c) => c.id === lead?.id) ? { id: `${id}:chart`, group: 'This drop', col: 1, title: 'Progress chart', sub: 'Its forecast on the dashboard', icon: 'pulse', run: () => (openSide(ui.sideTab), runAction('chart-campaign', { id: lead.id })) } : null,
       { id: `${id}:history`, group: 'This drop', col: 1, title: 'In History', sub: 'Its credits, sessions and channels', icon: 'clock', run: history },
       page ? { id: `${id}:page`, group: 'This drop', col: 1, title: 'Drop page on kick.com', sub: 'In your browser', icon: 'external', run: page } : null,
+      connect ? { id: `${id}:connect`, group: 'This drop', col: 1, title: 'Connect your Kick account', sub: connectUrl.replace(/^https?:\/\//, '').replace(/\/$/, ''), icon: 'link', words: ['link', 'account'], run: connect } : null,
       lead?.url ? { id: `${id}:copy`, group: 'This drop', col: 1, title: 'Copy link', sub: lead.url.replace(/^https?:\/\//, ''), icon: 'copy', run: () => navigator.clipboard.writeText(lead.url).catch(() => {}), done: 'Link copied' } : null,
       ...camps.flatMap((c) =>
         c.rewards
