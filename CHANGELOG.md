@@ -2,7 +2,10 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.31 (current)
+## 0.1.32 (current)
+- Tray: a drop with many rewards fits, the claimed and later ones folded into tiles of their own
+
+## 0.1.31
 - Big drops read well: rewards close together share a chart marker, many channels show as live and offline counts, and Connect shows up front; What's new loads with a slow keychain
 
 ## 0.1.30
