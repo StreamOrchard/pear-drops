@@ -1736,3 +1736,20 @@
     animation: none;
   }
 }
+
+/* The hero, watching a stream for the daily reward: each crate filling, its chest in its colours. */
+.reward-img.crate-art {
+  display: grid;
+  place-items: center;
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+.reward-img.crate-art:not(.theme-daily) {
+  color: var(--ev);
+  background: color-mix(in srgb, var(--ev) 14%, transparent);
+}
+.reward-img.crate-art .icon.chest {
+  width: 60%;
+  height: 60%;
+  --chest-bg: #15181d;
+}

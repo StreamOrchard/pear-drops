@@ -1,4 +1,4 @@
-/* global commands, palette, initPalette, initPaletteItems, developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, whyModal, loadWhy, rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
+/* global chestMark, fillingCrates, commands, palette, initPalette, initPaletteItems, developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, whyModal, loadWhy, rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
 
 let state = null;
 const ui = {
@@ -119,9 +119,9 @@ function statusInfo() {
   if (f.conflict) return { cls: 'conflict', text: 'Another stream is taking your credit' };
   // A stream in trouble shows here at once, before the app has moved on.
   const health = streamHealth(f);
-  if (health && f.status.code === 'farming' && ['checking', 'frozen'].includes(health.state)) return { cls: health.tone === 'bad' ? 'error' : 'waiting', text: f.health.text };
+  if (health && ['farming', 'rewards'].includes(f.status.code) && ['checking', 'frozen'].includes(health.state)) return { cls: health.tone === 'bad' ? 'error' : 'waiting', text: f.health.text };
   const code = f.status.code;
-  const map = { farming: 'farming', paused: 'paused', waiting: 'waiting', done: 'done', error: 'error', starting: 'waiting' };
+  const map = { farming: 'farming', rewards: 'farming', paused: 'paused', waiting: 'waiting', done: 'done', error: 'error', starting: 'waiting' };
   return { cls: map[code] ?? 'waiting', text: f.status.message };
 }
 
@@ -303,6 +303,7 @@ function renderHero() {
       ${noticeHTML(f)}`,
     );
   }
+  if (cur.reward) return renderRewardHero(f, cur);
 
   const primary = primaryCampaign();
   const fc = primary ? f.forecast[primary.id] : null;
@@ -367,6 +368,63 @@ function renderHero() {
       <div class="stall-track"><i style="width:${(stallFrac * 100).toFixed(1)}%;background:${stallColor}"></i></div>
       <span>${stallFrac >= 1 ? 'Recovering…' : `auto-recover after ${f.stallMinutes}m without credit`}</span>
     </div>`,
+  );
+}
+
+/**
+ * With no drop to farm, a stream watched for Kick's daily reward and event crates: the stream, and
+ * each crate still filling, as a drop's rewards are.
+ */
+function renderRewardHero(f, cur) {
+  const filling = fillingCrates(dailyReward());
+  const first = filling[0];
+  const frac = first ? first.minutes / Math.max(1, first.threshold) : 0;
+  const left = (c) => Math.max(0, c.threshold - c.minutes);
+  const roomy = filling.length <= 2;
+  const crateLine = (c) => `<div class="reward-line">
+    <div class="reward-img crate-art theme-${esc(c.theme)}">${chestMark()}</div>
+    <div class="rl-body"><div class="rl-top"><span class="reward-name">${esc(c.title)}</span><span class="rl-status num">${c.minutes}/${c.threshold}m</span></div>
+    <div class="mini-bar"><i style="width:${((c.minutes / Math.max(1, c.threshold)) * 100).toFixed(1)}%"></i></div>
+    ${roomy ? `<span class="rl-eta">Earned ${fmtEta(left(c))}</span>` : ''}</div>
+  </div>`;
+  setHTML(
+    $('#hero'),
+    `<div class="hero-bg"></div>
+    <div class="hero-inner">
+      <div class="hero-head">
+        <span class="eyebrow" style="color:var(--green)">Watching for daily rewards</span>
+        <h1 class="hero-title">${esc(first?.title ?? 'Daily reward')} <span class="hero-cat">· no drop to farm</span></h1>
+      </div>
+      <div class="hero-grid">
+        <div class="hero-stream">
+          <div class="hs-top">
+            ${img(cur.avatar, 'avatar lg ring-live')}
+            <div class="who">
+              <div class="name">${esc(cur.username)} ${cur.followed ? icon('heart') : ''}</div>
+              <div class="hs-meta">${healthChip(f)}<span class="chip flat num">${icon('eye')} ${fmtCount(cur.viewers)}</span></div>
+            </div>
+          </div>
+          <div class="title">${esc(cur.title ?? '')}</div>
+          <div class="hero-actions">
+            <button class="btn sm" data-action="reload" data-tip="Reload the player">${icon('reload')} Reload</button>
+            <button class="btn sm" data-action="skip" data-tip="Switch to another stream">${icon('skip')} Skip stream</button>
+          </div>
+        </div>
+        <div class="hero-rewards ${roomy ? 'roomy' : ''}">${filling.slice(0, 3).map(crateLine).join('')}</div>
+        <div class="hero-side">
+          ${progressRing(frac, { size: 124, stroke: 10, label: `${Math.floor(frac * 100)}%`, sub: first ? `${first.minutes} / ${first.threshold} min` : '' })}
+          <dl class="eta">
+            ${filling
+              .slice(0, 2)
+              .map((c) => `<dt>${esc(c.title)}</dt><dd>${fmtMin(left(c))}</dd>`)
+              .join('')}
+            <dt class="opt">Watching for</dt><dd class="opt">${fmtDur(Date.now() - cur.startedWatchingAt)}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    ${noticeHTML(f)}
+    <div class="hero-stall"><span>Any stream fills them. A drop with a live stream comes first.</span></div>`,
   );
 }
 
@@ -453,7 +511,8 @@ function idleChart(f) {
 function renderChart() {
   const f = farm();
   const el = $('#chart');
-  const idle = f && !f.current ? idleChart(f) : null;
+  // Watching for the daily reward is no drop's: the scene, as with nothing playing.
+  const idle = f && (!f.current || f.current.reward) ? idleChart(f) : null;
   const stamp = f
     ? [ui.chartCampaign, f.current?.slug, f.paused, f.status.code, f.checkedAt, f.samples.length, f.timeline.length, f.samples.at(-1)?.t, Math.floor(Date.now() / 15000), el.clientWidth, el.clientHeight].join('|')
     : '';
@@ -463,7 +522,7 @@ function renderChart() {
   const now = Date.now();
   const checks = f.timeline.some((e) => e.type === 'check' && e.t > now - 60 * MIN);
   // With nothing playing, the monitor says what it's showing instead.
-  const quiet = !idle ? '' : f.paused ? 'Paused · watch events start again when you resume' : idle.mode === 'done' ? 'Each check for new campaigns shows here' : 'Each check for a live channel shows here';
+  const quiet = !idle || f.current ? '' : f.paused ? 'Paused · watch events start again when you resume' : idle.mode === 'done' ? 'Each check for new campaigns shows here' : 'Each check for a live channel shows here';
   const monitor = `<div class="monitor">
       <div class="monitor-head"><span class="card-title">${icon('pulse')} Live monitor</span>
         <div class="legend">
@@ -1065,6 +1124,14 @@ const SETTINGS_ROWS = [
     ],
     value: (s) => (['self', 'now'].includes(s.dailyClaim) ? s.dailyClaim : 'before-reset'),
     words: ['crate', 'chest'],
+  },
+  {
+    page: 'farming',
+    id: 'rewardWatch',
+    title: 'Watch for daily rewards',
+    sub: 'With no drop to farm, watch a stream until the daily crate and any event’s are earned. Not while Stream Multiview is watching Kick as you.',
+    type: 'switch',
+    words: ['crate', 'chest', 'event', 'idle'],
   },
   { page: 'farming', id: 'includeGameDrops', title: 'Include game drops', sub: 'Also farm rewards that need a linked game account.', type: 'switch' },
   { page: 'recovery', id: 'stallMinutes', title: 'Recover a stalled stream after', sub: 'With no progress for this long, reload the stream, then switch to another.', type: 'range', min: 5, max: 60, step: 1, unit: 'min', words: ['stall', 'stuck'] },

@@ -265,6 +265,50 @@ test('farming stops with its players out on Auto: the log and the card say they 
   await a.farming();
 });
 
+test('with no drop to farm, it watches for the daily reward while Stream Multiview isn’t watching Kick as you, and leaves when it is', async () => {
+  const watching = () => a.app.evaluate(() => (global.pdDebug.farmer.current?.reward ? global.pdDebug.farmer.current.slug : null));
+  await a.demo((d) => d.multiview({ signedIn: false, mode: 'auto' }));
+  await a.demo((d) => d.daily({ minutes: 10, claimed: false }));
+  const rows = await a.app.evaluate(() => global.pdDebug.farmer.model.categories.map((c) => c.id));
+  await a.win.evaluate((ids) => window.pd.setSettings({ disabledCategories: ids }), rows);
+  await a.demo(async (d) => {
+    while (d.farmer.ticking) await new Promise((r) => setTimeout(r, 50));
+    await d.tick();
+  });
+  await until(a.win, () => state?.farm?.current?.reward, 'watching for the daily reward', 15000);
+  assert.match(await a.win.textContent('#hero'), /Watching for daily rewards/);
+  assert.match(await a.win.textContent('#hero'), /Daily reward/);
+  // Not farming a drop: Stream Multiview leaves its Kick players as they are.
+  let heard = null;
+  for (let i = 0; i < 100 && !heard; i++) {
+    heard = await a.app.evaluate(() => global.pdDemo.multiviewPeer.link.request('com.streamorchard.peardrops', 'drops.farming.get').catch(() => null));
+    if (!heard) await a.win.waitForTimeout(150);
+  }
+  assert.equal(heard?.state, 'waiting');
+
+  // Its players watch signed in, as this account: left at once.
+  await a.demo((d) => d.multiview({ signedIn: true, mode: 'manual', open: ['pixelpear'] }));
+  for (let i = 0; i < 100 && (await watching()); i++) await a.win.waitForTimeout(150);
+  assert.equal(await watching(), null);
+  const ends = await a.win.evaluate(async () => (await window.pd.history({ range: 'all' })).events.filter((e) => e.type === 'watch-end' && e.reward).map((e) => e.reason));
+  assert.ok(ends.includes('Stream Multiview is watching Kick as you'), ends.join(' · '));
+
+  // Signed out again: watched for again. Switched off in Settings: left.
+  await a.demo((d) => d.multiview({ signedIn: false, mode: 'auto' }));
+  for (let i = 0; i < 100 && !(await watching()); i++) await a.win.waitForTimeout(150);
+  assert.ok(await watching(), 'watching again');
+  await a.win.evaluate(() => window.pd.setSettings({ rewardWatch: false }));
+  for (let i = 0; i < 100 && (await watching()); i++) await a.win.waitForTimeout(150);
+  assert.equal(await watching(), null);
+
+  await a.win.evaluate(() => window.pd.setSettings({ disabledCategories: [], rewardWatch: true }));
+  await a.demo(async (d) => {
+    while (d.farmer.ticking) await new Promise((r) => setTimeout(r, 50));
+    await d.tick();
+  });
+  await a.farming();
+});
+
 test('Disconnect forgets the pairing and switches it off; History has the link coming and going', async () => {
   await openTab();
   await until(a.win, () => document.querySelector('.app-card [data-action="connected-disconnect"]'), 'Disconnect');
