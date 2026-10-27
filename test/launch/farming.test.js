@@ -764,3 +764,42 @@ test('a drop with one or two rewards gives them the room, with when each unlocks
   await until(a.win, () => document.querySelector('#hero .hero-rewards.roomy'), 'the roomy rewards', 10000);
   assert.match(await a.win.textContent('#hero .hero-rewards'), /Unlocks .+ · /);
 });
+
+test('in the tray, a drop with many rewards folds them into four tiles: the claimed ones, the next two, and "+N" more', async () => {
+  // The stand-in raffle (eleven rewards, every hour then every five) on its own, at 178 minutes: two claimed, nine to go.
+  // Kick drops Neon Rush while it's watched: the dashboard's chart has no drop to draw for a moment (it once threw).
+  await a.app.evaluate(() => global.pdDebug.store.set({ includeGameDrops: true }));
+  await a.demo((d) => d.bigDrop(178));
+  await a.demo((d) => d.endDrop('c-neon'));
+  const id = await a.app.evaluate(() => global.pdDebug.farmer.model.categories.find((c) => c.campaigns.some((x) => x.id === 'c-raffle'))?.id);
+  assert.ok(id, 'the raffle in the queue');
+  await a.win.evaluate((cat) => window.pd.watch('arcadia', cat), id);
+  // The icon's click toggles the popover, and a test before may have left it open: open it, and again if that closed it.
+  const shown = () => a.app.evaluate(() => global.pdDebug.tray.window?.isVisible());
+  for (let i = 0; i < 3 && !(await shown()); i++) {
+    await a.demo((d) => d.openTray());
+    await a.win.waitForTimeout(300);
+  }
+  const pop = a.app.windows().find((x) => x.url().endsWith('tray.html'));
+  await until(pop, () => document.querySelector('.tray-camp')?.textContent === 'Arcadia Cup PC Raffle' && document.querySelector('.tray-reward.claimed.group'), 'the raffle in the tray', 15000);
+  const tiles = await pop.$$eval('.tray-rewards .tray-reward', (els) => {
+    const row = document.querySelector('.tray-now').getBoundingClientRect();
+    return els.map((e) => {
+      const r = e.getBoundingClientRect();
+      return { text: e.textContent.replace(/\s+/g, ''), tip: e.dataset.tip ?? null, stack: e.querySelectorAll('.stack img').length, inside: r.left >= row.left && r.right <= row.right, width: Math.round(r.width) };
+    });
+  });
+  assert.deepEqual(
+    tiles.map(({ text, tip, stack }) => ({ text, tip, stack })),
+    [
+      { text: '2', tip: '2 rewards claimed', stack: 2 },
+      { text: '98%', tip: null, stack: 0 },
+      { text: '74%', tip: null, stack: 0 },
+      { text: '+7', tip: '7 more rewards, the last at 35h 00m watched', stack: 3 },
+    ],
+  );
+  assert.ok(tiles.every((t) => t.inside), 'every tile inside the popover');
+  assert.equal(new Set(tiles.map((t) => t.width)).size, 1, 'all the same width');
+  await a.demo((d) => d.relistDrop('c-neon'));
+  await a.app.evaluate(() => global.pdDebug.store.set({ includeGameDrops: false }));
+});

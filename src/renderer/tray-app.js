@@ -42,6 +42,32 @@ function noticeLine(f) {
   return n ? `<div class="tray-notice" data-kind="${n.kind}">${icon(n.icon)}<span>${esc(n.text)}</span><small>${fmtAgo(n.at)}</small></div>` : '';
 }
 
+// The reward row's tiles: four fit across the popover.
+const REWARD_TILES = 4;
+
+/**
+ * The drop's rewards, a tile each. Past four, the claimed ones fold into one tile at the start and
+ * the last ones into a "+N" tile at the end, so the next rewards to unlock always show.
+ */
+function trayRewards(p) {
+  const rewards = (p?.rewards ?? []).filter((r) => r.tracked);
+  const tile = (r) => `<div class="tray-reward ${r.claimed ? 'claimed' : r.ready ? 'ready' : ''}" ${previewAttrs(r, p.units)}>
+    ${img(r.image)}<span>${r.claimed ? icon('check') : `${Math.min(100, Math.floor((p.units / r.required) * 100))}%`}</span></div>`;
+  // A folded tile's images: the first three, the first in front.
+  const stack = (list) => `<span class="stack">${list.slice(0, 3).map((r) => img(r.image)).join('')}</span>`;
+  if (rewards.length <= REWARD_TILES) return `<div class="tray-rewards">${rewards.map(tile).join('')}</div>`;
+  const claimed = rewards.filter((r) => r.claimed);
+  const open = rewards.filter((r) => !r.claimed);
+  const room = REWARD_TILES - (claimed.length ? 1 : 0);
+  const shown = open.length <= room ? open : open.slice(0, room - 1);
+  const later = open.slice(shown.length);
+  return `<div class="tray-rewards">
+    ${claimed.length ? `<div class="tray-reward claimed group" data-tip="${claimed.length} rewards claimed">${stack(claimed.slice(-3).reverse())}<span>${icon('check')}${claimed.length}</span></div>` : ''}
+    ${shown.map(tile).join('')}
+    ${later.length ? `<div class="tray-reward group" data-tip="${later.length} more rewards, the last at ${fmtMin(later.at(-1).required)} watched">${stack(later)}<span>+${later.length}</span></div>` : ''}
+  </div>`;
+}
+
 function render() {
   const root = $('#tray');
   if (!state) return;
@@ -108,13 +134,7 @@ function render() {
             </dl>
           </div>
         </div>
-        <div class="tray-rewards">${(p?.rewards ?? [])
-          .filter((r) => r.tracked)
-          .map(
-            (r) => `<div class="tray-reward ${r.claimed ? 'claimed' : r.ready ? 'ready' : ''}" ${previewAttrs(r, p.units)}>
-              ${img(r.image)}<span>${r.claimed ? icon('check') : `${Math.min(100, Math.floor((p.units / r.required) * 100))}%`}</span></div>`,
-          )
-          .join('')}</div>
+        ${trayRewards(p)}
       </div>`
     : `<div class="tray-empty">${icon(f.paused ? 'pause' : f.status.code === 'done' ? 'trophy' : 'clock')}<div>${esc(f.paused ? 'Paused. Nothing is being watched.' : f.status.message)}</div></div>`;
 
