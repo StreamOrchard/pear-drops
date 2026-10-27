@@ -103,15 +103,19 @@ body.tray-body {
   gap: 3px 10px;
   font-size: 11.5px;
 }
+/* Four tiles across, however many rewards: trayRewards() folds the rest into the end ones. */
 .tray-rewards {
-  display: flex;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
 }
 .tray-reward {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 4px 8px 4px 4px;
+  min-width: 0;
+  padding: 4px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border);
@@ -129,6 +133,33 @@ body.tray-body {
   width: 13px;
   height: 13px;
   color: var(--green);
+}
+/* A folded tile: its rewards as a fanned deck, the first in front and the others peeking out behind. */
+.tray-reward .stack {
+  display: flex;
+  align-items: center;
+}
+.tray-reward .stack img {
+  position: relative;
+  z-index: 3;
+  border-radius: 7px;
+}
+.tray-reward .stack img:nth-child(2) {
+  z-index: 2;
+  margin-left: -17px;
+  transform: scale(0.84);
+  filter: brightness(0.6);
+}
+.tray-reward .stack img:nth-child(3) {
+  z-index: 1;
+  margin-left: -18px;
+  transform: scale(0.68);
+  filter: brightness(0.38);
+}
+.tray-reward.group span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 .tray-reward.claimed {
   border-color: rgba(83, 252, 24, 0.25);

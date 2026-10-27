@@ -556,8 +556,9 @@ function idleChart(f) {
 function renderChart() {
   const f = farm();
   const el = $('#chart');
-  // Watching for the daily reward is no drop's: the scene, as with nothing playing.
-  const idle = f && (!f.current || f.current.reward) ? idleChart(f) : null;
+  // Watching for the daily reward is no drop's: the scene, as with nothing playing. So is a stream
+  // whose drops Kick no longer lists (it took them down), until the farmer moves on.
+  const idle = f && (!f.current || f.current.reward || !currentCampaigns().length) ? idleChart(f) : null;
   const stamp = f
     ? [ui.chartCampaign, f.current?.slug, f.paused, f.status.code, f.checkedAt, f.samples.length, f.timeline.length, f.samples.at(-1)?.t, Math.floor(Date.now() / 15000), el.clientWidth, el.clientHeight].join('|')
     : '';
