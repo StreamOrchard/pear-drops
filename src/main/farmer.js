@@ -106,11 +106,14 @@ class Farmer extends EventEmitter {
    * @param {object} o
    * @param {() => (string|null)} [o.rewardWatch] why not to watch a stream for Kick's daily reward
    *   (and event crates) while there's no drop to farm, or null to watch one
+   * @param {() => (string|null)} [o.language] the computer's language ("en", "es"): a stream for the
+   *   daily reward in it comes first
    */
-  constructor({ api, watcher, store, history, archive = null, cache = null, rewardWatch = () => 'Off' }) {
+  constructor({ api, watcher, store, history, archive = null, cache = null, rewardWatch = () => 'Off', language = () => null }) {
     super();
     this.api = api;
     this.rewardWatch = rewardWatch;
+    this.language = language;
     this.archive = archive; // local copies of campaigns and their images (archive.js)
     this.cache = cache; // the startup cache's store, { load(), save(data) } (db.js)
     this.history = history;
@@ -1396,7 +1399,8 @@ class Farmer extends EventEmitter {
   /**
    * No drop to watch: a stream for Kick's daily reward (and an event's crate), which any stream
    * fills, unless it needn't be (rewardWatch says why). A live channel you follow first, then
-   * Kick's most watched (not one marked mature). Whether one was picked.
+   * Kick's most watched in the computer's language, then any (not one marked mature). Whether one
+   * was picked.
    */
   async watchForReward() {
     const why = this.rewardWatch();
@@ -1409,6 +1413,7 @@ class Farmer extends EventEmitter {
       return false;
     }
     const now = Date.now();
+    const lang = String(this.language() ?? '').toLowerCase().split(/[-_]/)[0];
     const streams = list
       .filter((ls) => ls?.channel?.slug && (this.blacklist.get(ls.channel.slug) ?? 0) <= now)
       .map((ls) => ({
@@ -1420,14 +1425,15 @@ class Farmer extends EventEmitter {
         viewers: ls.viewer_count ?? 0,
         thumbnail: ls.thumbnail?.src,
         mature: !!ls.is_mature,
+        mine: !!lang && String(ls.language ?? '').toLowerCase().split(/[-_]/)[0] === lang,
         category: ls.category ?? ls.categories?.[0] ?? null,
         followed: this.followed.has(String(ls.channel.slug).toLowerCase()),
       }))
       .filter((s) => s.followed || !s.mature)
-      .sort((a, b) => Number(b.followed) - Number(a.followed) || b.viewers - a.viewers);
+      .sort((a, b) => Number(b.followed) - Number(a.followed) || Number(b.mine) - Number(a.mine) || b.viewers - a.viewers);
     const stream = streams[0];
     if (!stream) return false;
-    const reason = stream.followed ? 'a channel you follow' : `the most watched on Kick (${stream.viewers} viewers)`;
+    const reason = stream.followed ? 'a channel you follow' : `the most watched on Kick${stream.mine ? ' in your language' : ''} (${stream.viewers} viewers)`;
     const text = `Picked ${stream.username} for the daily reward: no drop to watch, ${reason}`;
     this.addLog('info', text);
     this.record('decision', { slug: stream.slug, channel: stream.username, avatar: stream.avatar, reward: true, text });
