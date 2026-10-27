@@ -2,7 +2,10 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.30 (current)
+## 0.1.31 (current)
+- Big drops read well: rewards close together share a chart marker, many channels show as live and offline counts, and Connect shows up front; What's new loads with a slow keychain
+
+## 0.1.30
 - Ready for Electron 45: Connected apps' pairing keys use the system keychain's async methods
 - Connected apps' pairing keys are saved again with the system's new key when the keychain changes it
 - History's charts follow the clock when it goes back or forward: the hour that comes round twice gets its own bar, and each day starts at midnight
