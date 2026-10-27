@@ -1433,6 +1433,27 @@ test('the most watched stream when none you follow is live, leaving out a mature
   assert.match(farmer.current.pickedWhy, /most watched/);
 });
 
+test('in the computer’s language first, after a channel you follow; any language when none is', async () => {
+  const lang = (slug, id, viewers, language) => ({ ...live(slug, id, viewers), language });
+  const top = [lang('hola', 93, 30000, 'es'), lang('marhaba', 94, 20000, 'ar'), lang('hello', 95, 900, 'en'), lang('pal', 91, 40, 'es')];
+  const mine = rewardSetup({ campaigns: [] }, { top });
+  mine.farmer.language = () => 'en-GB';
+  await mine.farmer.tick();
+  assert.equal(mine.watcher.watching, 'hello');
+  assert.match(mine.farmer.current.pickedWhy, /most watched on Kick in your language/);
+
+  const followed = rewardSetup({ campaigns: [], followed: ['pal'] }, { top });
+  followed.farmer.language = () => 'en';
+  await followed.farmer.tick();
+  assert.equal(followed.watcher.watching, 'pal', 'a channel you follow comes first, whatever its language');
+
+  const none = rewardSetup({ campaigns: [] }, { top });
+  none.farmer.language = () => 'fr_FR';
+  await none.farmer.tick();
+  assert.equal(none.watcher.watching, 'hola');
+  assert.doesNotMatch(none.farmer.current.pickedWhy, /your language/);
+});
+
 test('nothing live for the drops left: watches for the daily reward too, and goes to the drop once its stream is live', async () => {
   const { farmer, watcher, api, history } = rewardSetup({ campaigns: [campaign('a')], streams: { 1: [live('dropper', 1)] } });
   api.offline.add('dropper');

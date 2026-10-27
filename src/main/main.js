@@ -1103,7 +1103,9 @@ app.whenReady().then(async () => {
   });
   if (DEMO && env('PD_DEMO_SEED') && history.isEmpty()) demo.seedHistoryLog(history);
   createNotifier();
-  farmer = new Farmer({ api, watcher, store, history, archive, cache: db.cache, rewardWatch: rewardWatchBlocker });
+  // The computer's own language, first choice ("en-GB"): a stream for the daily reward in it comes first.
+  const language = () => app.getPreferredSystemLanguages?.()[0] ?? app.getLocale();
+  farmer = new Farmer({ api, watcher, store, history, archive, cache: db.cache, rewardWatch: rewardWatchBlocker, language });
   // Settings › Developer › Watch events: each one from the player, credited once progress goes up.
   watcher.on('watch-event', ({ channelId }) => {
     devLog.watch({ slug: watcher.slug, channelId });
