@@ -10,6 +10,7 @@ const DEFAULTS = {
   followedMinutes: 15,
   autoClaim: true,
   dailyClaim: 'before-reset', // Kick's daily reward: 'self' · 'before-reset' (15 min before midnight UTC) · 'now'
+  rewardWatch: true, // with no drop to farm, watch a stream for Kick's daily reward and event crates (farmer.js watchForReward)
   includeGameDrops: false,
   unmutePlayer: true,
   playerMode: 'light', // 'light': embed player + popout chat · 'full': the whole channel page

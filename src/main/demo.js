@@ -604,7 +604,12 @@ class DemoApi {
     return { id: prize.id, rarity: prize.rarity, card_url: '', thumbnail_url: prize.thumbnail_url };
   }
 
+  /** A category's live streams, or (no category) every one, most watched first, as Kick's list. */
   async livestreams(categoryId) {
+    if (categoryId === undefined) {
+      const all = await Promise.all(Object.keys(LIVE).map((id) => this.livestreams(id)));
+      return all.flat().sort((a, b) => b.viewer_count - a.viewer_count);
+    }
     return (LIVE[categoryId] ?? []).filter(([slug]) => !this.offline.has(slug)).map(([slug, title, viewers], i) => {
       const c = ch(slug);
       return {
@@ -614,7 +619,7 @@ class DemoApi {
         thumbnail: { src: this.brokenThumbs.has(slug) ? 'data:image/webp;base64,AAAA' : thumbnail(c.glyph, c.hue) },
         start_time: new Date(Date.now() - (40 + i * 25) * MIN).toISOString(),
         channel: { id: c.id, slug, username: c.username, profile_pic: c.avatar },
-        category: { id: categoryId },
+        category: { id: Number(categoryId), name: Object.values(CATEGORIES).find((c) => c.id === Number(categoryId))?.name },
         language: 'en',
         is_mature: false,
       };

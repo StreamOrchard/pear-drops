@@ -55,6 +55,8 @@ test('drops.farming says what Pear Drops is doing, in its own words', () => {
   assert.equal(farmingState('paused', true), 'paused');
   assert.equal(farmingState('done', true), 'done');
   for (const code of ['waiting', 'starting', 'error', undefined]) assert.equal(farmingState(code, true), 'waiting');
+  // Watching a stream for the daily reward isn't farming a drop: Stream Multiview keeps its Kick players signed in.
+  assert.equal(farmingState('rewards', true), 'waiting');
   assert.equal(farmingState('farming', false), 'signed-out');
 
   const { c, farmer, auth, cleanup } = setup();

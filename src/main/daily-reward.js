@@ -348,6 +348,11 @@ class DailyReward extends EventEmitter {
     if (this.running) this.schedule(1500);
   }
 
+  /** Whether the daily crate, or an event's, still fills by watching today. */
+  needsWatching() {
+    return this.running && [this.daily, ...this.extras].some((c) => c?.state === 'earning' && c.condition === 'watch_time_minutes');
+  }
+
   /** The card was opened: what it says now, unless that was just asked (or a claim is under way). */
   opened() {
     if (this.running && !this.claiming && this.now() - this.checkedAt >= OPENED_MS) this.refresh();
