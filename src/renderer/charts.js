@@ -32,12 +32,22 @@ function progressRing(fraction, { size = 132, stroke = 10, label = '', sub = '' 
   </svg>`;
 }
 
-// A rounded "pill" label, kept inside [minX, maxX].
-function pill(x, y, text, { cls = '', anchor = 'middle', minX = 0, maxX = 1e9 } = {}) {
+// Where a pill label goes: its box, kept inside [minX, maxX].
+function pillBox(x, y, text, { anchor = 'middle', minX = 0, maxX = 1e9 } = {}) {
   const w = Math.round(text.length * 6.3 + 20);
   const h = 22;
   let left = anchor === 'end' ? x - w : anchor === 'start' ? x : x - w / 2;
   left = Math.max(minX, Math.min(left, maxX - w));
+  return { left, top: y - h / 2, right: left + w, bottom: y + h / 2 };
+}
+
+const overlaps = (a, b, gap = 4) => a.left < b.right + gap && b.left < a.right + gap && a.top < b.bottom + gap && b.top < a.bottom + gap;
+
+// A rounded "pill" label, kept inside [minX, maxX].
+function pill(x, y, text, { cls = '', anchor = 'middle', minX = 0, maxX = 1e9 } = {}) {
+  const { left, right } = pillBox(x, y, text, { anchor, minX, maxX });
+  const w = right - left;
+  const h = 22;
   return `<g class="pill ${cls}">
     <rect x="${left}" y="${y - h / 2}" width="${w}" height="${h}" rx="${h / 2}"/>
     <text x="${left + w / 2}" y="${y + 4}" text-anchor="middle">${escapeHtml(text)}</text></g>`;
@@ -141,13 +151,18 @@ function progressChart({ points, rewards, target, now, rate = 1, width = 720, he
   const labels = [];
   const tracked = (rewards || []).filter((rw) => rw.tracked).sort((a, b) => a.required - b.required);
   const last = tracked[tracked.length - 1];
-  let prevLabel = null;
+  // Labels go where nothing else is: the "now" label first, then the final one, then the rest.
+  const nowText = target ? `${units} of ${target} min` : `${units} min`;
+  const nowY = yNow - 22 < pad.t + 6 ? yNow + 24 : yNow - 22;
+  const placed = [pillBox(xNow - 12, nowY, nowText, { anchor: 'end', ...bounds })];
+  const upcoming = [];
   tracked.forEach((rw) => {
     const yy = y(rw.required);
     if (rw.required <= units) {
       const hit = pts.find((p) => p[1] >= rw.required);
       if (!hit || hit[0] <= t0) return;
       const xx = x(hit[0]);
+      placed.push({ left: xx - 6, right: xx + 6, top: yy - 6, bottom: yy + 6 });
       markers.push(`<circle cx="${xx}" cy="${yy}" r="6" class="m-past"/><path d="M${xx - 2.6},${yy} l1.8,1.9 l3.4,-3.6" class="m-check"/>`);
       return;
     }
@@ -156,24 +171,69 @@ function progressChart({ points, rewards, target, now, rate = 1, width = 720, he
     if (tHit > t1) {
       // Done further out than the chart reaches: say when, at its edge.
       const text = resume ? `Done ${durLabel((tHit - now) / CHART_MIN)} after resuming` : `Done in ${durLabel((tHit - now) / CHART_MIN)}`;
-      if (rw === last) labels.push(pill(pad.l + w, y(uAt(t1)) - 22, text, { cls: 'p-final', anchor: 'end', ...bounds }));
+      if (rw === last) {
+        placed.push(pillBox(pad.l + w, y(uAt(t1)) - 22, text, { anchor: 'end', ...bounds }));
+        labels.push(pill(pad.l + w, y(uAt(t1)) - 22, text, { cls: 'p-final', anchor: 'end', ...bounds }));
+      }
       return;
     }
     const xx = x(tHit);
-    const clip = `${id}-c${markers.length}`;
-    const final = rw === last;
+    // Rewards close enough that their markers would overlap share one, with "+N" for the others.
+    // (A group sits on its newest reward's place, so a run of them all goes in one.)
+    const prev = upcoming.at(-1);
+    if (prev && Math.hypot(xx - prev.x, yy - prev.y) < 30) Object.assign(prev, { x: xx, y: yy }).rewards.push({ rw, tHit });
+    else upcoming.push({ x: xx, y: yy, rewards: [{ rw, tHit }] });
+  });
+  // Labels keep off every marker too (a label just clears its own).
+  for (const g of upcoming) placed.push({ left: g.x - 12, right: g.x + 12, top: g.y - 12, bottom: g.y + 12 });
+  // Paused, there's no telling when: say how long after resuming instead.
+  const after = (t) => durLabel((t - now) / CHART_MIN);
+  const textOf = (g) => {
+    const first = g.rewards[0];
+    const end = g.rewards.at(-1);
+    const final = end.rw === last;
+    if (final) return resume ? `Done ${after(end.tHit)} after resuming` : `Done ${clockLabel(end.tHit)} · ${after(end.tHit)}`;
+    if (g.rewards.length === 1) return resume ? `${first.rw.name} · ${after(first.tHit)} in` : `${first.rw.name} · ${clockLabel(first.tHit)}`;
+    return resume ? `${g.rewards.length} rewards · ${after(first.tHit)}–${after(end.tHit)} in` : `${g.rewards.length} rewards · ${clockLabel(first.tHit)}–${clockLabel(end.tHit)}`;
+  };
+  const tipOf = (g) => g.rewards.map(({ rw, tHit }) => `${rw.name} · ${resume ? `${after(tHit)} after resuming` : clockLabel(tHit)}`).join('\n');
+  const final = upcoming.find((g) => g.rewards.some(({ rw }) => rw === last));
+  // Where nothing fits the whole label, just when (the marker's picture and tooltip say what).
+  const shortOf = (g) => {
+    const [first, end] = [g.rewards[0], g.rewards.at(-1)];
+    if (resume) return g.rewards.length > 1 ? `${after(first.tHit)}–${after(end.tHit)} in` : `${after(first.tHit)} in`;
+    return g.rewards.length > 1 ? `${clockLabel(first.tHit)}–${clockLabel(end.tHit)}` : clockLabel(first.tHit);
+  };
+  for (const g of final ? [final, ...upcoming.filter((u) => u !== final)] : upcoming) {
+    // Beside its marker on the left (where the climbing line leaves room), else above, else below;
+    // the final one, else higher up, or above it anyway. With no room, another goes without.
+    const isFinal = g === final;
+    const spots = (text) =>
+      [
+        [g.x - 20, g.y, 'end'],
+        [g.x, g.y - 27, 'middle'],
+        [g.x, g.y + 27, 'middle'],
+        ...(isFinal ? [[g.x, g.y - 54, 'middle']] : []),
+      ].map(([lx, ly, anchor]) => ({ text, lx, ly, anchor, box: pillBox(lx, ly, text, { anchor, ...bounds }) }));
+    const fits = ({ box }) => box.top >= pad.t - 14 && box.bottom <= bottom + 4 && !placed.some((b) => overlaps(b, box));
+    const full = spots(textOf(g));
+    const spot = full.find(fits) ?? (isFinal ? null : spots(shortOf(g)).find(fits)) ?? (isFinal ? full[1] : null);
+    if (spot) {
+      placed.push(spot.box);
+      labels.push(pill(spot.lx, spot.ly, spot.text, { cls: isFinal ? 'p-final' : 'p-next', anchor: spot.anchor, ...bounds }));
+    }
+  }
+  upcoming.forEach((g, i) => {
+    const { x: xx, y: yy } = g;
+    const rw = g.rewards.at(-1).rw;
+    const clip = `${id}-c${i}`;
+    const more = g.rewards.length - 1;
     markers.push(`<line x1="${xNow}" x2="${xx}" y1="${yy}" y2="${yy}" class="guide"/>
+      <g class="m-reward" data-tip="${escapeHtml(tipOf(g))}">
       <clipPath id="${clip}"><circle cx="${xx}" cy="${yy}" r="10"/></clipPath>
-      <circle cx="${xx}" cy="${yy}" r="13.5" class="m-ring ${final ? 'final' : ''}"/>
-      ${rw.image ? `<image href="${escapeHtml(rw.image)}" x="${xx - 10}" y="${yy - 10}" width="20" height="20" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid slice"/>` : ''}`);
-    // Labels sit above their marker; one that would collide drops below instead.
-    let ly = yy - 27;
-    if (prevLabel && Math.abs(prevLabel.x - xx) < 150 && Math.abs(prevLabel.y - ly) < 24) ly = yy + 27;
-    prevLabel = { x: xx, y: ly };
-    // Paused, there's no telling when: say how long after resuming instead.
-    const after = durLabel((tHit - now) / CHART_MIN);
-    const text = resume ? (final ? `Done ${after} after resuming` : `${rw.name} · ${after} in`) : final ? `Done ${clockLabel(tHit)} · ${after}` : `${rw.name} · ${clockLabel(tHit)}`;
-    labels.push(pill(xx, ly, text, { cls: final ? 'p-final' : 'p-next', ...bounds }));
+      <circle cx="${xx}" cy="${yy}" r="13.5" class="m-ring ${g === final ? 'final' : ''}"/>
+      ${rw.image ? `<image href="${escapeHtml(rw.image)}" x="${xx - 10}" y="${yy - 10}" width="20" height="20" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid slice"/>` : ''}
+      ${more ? `<circle cx="${xx + 12}" cy="${yy - 11}" r="8" class="m-more"/><text x="${xx + 12}" y="${yy - 7.5}" text-anchor="middle" class="m-more-n">+${more}</text>` : ''}</g>`);
   });
 
   return `<svg class="chart progress-chart${resume ? ' resume' : ''}" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
@@ -204,7 +264,7 @@ function progressChart({ points, rewards, target, now, rate = 1, width = 720, he
     ${markers.join('')}
     <circle cx="${xNow}" cy="${yNow}" r="10" class="now-halo"/>
     <circle cx="${xNow}" cy="${yNow}" r="5" class="now-dot"/>
-    ${pill(xNow - 12, yNow - 22 < pad.t + 6 ? yNow + 24 : yNow - 22, target ? `${units} of ${target} min` : `${units} min`, { cls: 'p-now', anchor: 'end', ...bounds })}
+    ${pill(xNow - 12, nowY, nowText, { cls: 'p-now', anchor: 'end', ...bounds })}
     ${labels.join('')}
   </svg>`;
 }

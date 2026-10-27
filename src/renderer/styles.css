@@ -1731,6 +1731,15 @@ span.img-missing {
   stroke: var(--teal);
   stroke-width: 2;
 }
+.chart .m-more {
+  fill: #262b33;
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+.chart .m-more-n {
+  fill: var(--text);
+  font: 750 9.5px var(--font);
+}
 .chart .m-past {
   fill: var(--green);
   stroke: var(--bg);
@@ -2591,6 +2600,9 @@ span.img-missing {
   width: 38px;
   height: 38px;
 }
+.row-art.one.reward .av {
+  border-radius: 10px;
+}
 .row-art.many .av {
   width: 28px;
   height: 28px;
@@ -2648,6 +2660,9 @@ span.img-missing {
   border: 1px solid var(--border);
   color: var(--text-2);
   font-size: 12px;
+}
+.row-chans.counts .row-chan {
+  padding-left: 10px;
 }
 .row-chan img {
   width: 20px;
