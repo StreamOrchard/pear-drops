@@ -41,7 +41,8 @@ function pillBox(x, y, text, { anchor = 'middle', minX = 0, maxX = 1e9 } = {}) {
   return { left, top: y - h / 2, right: left + w, bottom: y + h / 2 };
 }
 
-const overlaps = (a, b, gap = 4) => a.left < b.right + gap && b.left < a.right + gap && a.top < b.bottom + gap && b.top < a.bottom + gap;
+// Labels keep 4px apart, and clear of a marker (whose box says gap: 1) by a pixel.
+const overlaps = (a, b, gap = Math.min(a.gap ?? 4, b.gap ?? 4)) => a.left < b.right + gap && b.left < a.right + gap && a.top < b.bottom + gap && b.top < a.bottom + gap;
 
 // A rounded "pill" label, kept inside [minX, maxX].
 function pill(x, y, text, { cls = '', anchor = 'middle', minX = 0, maxX = 1e9 } = {}) {
@@ -162,7 +163,7 @@ function progressChart({ points, rewards, target, now, rate = 1, width = 720, he
       const hit = pts.find((p) => p[1] >= rw.required);
       if (!hit || hit[0] <= t0) return;
       const xx = x(hit[0]);
-      placed.push({ left: xx - 6, right: xx + 6, top: yy - 6, bottom: yy + 6 });
+      placed.push({ left: xx - 6, right: xx + 6, top: yy - 6, bottom: yy + 6, gap: 1 });
       markers.push(`<circle cx="${xx}" cy="${yy}" r="6" class="m-past"/><path d="M${xx - 2.6},${yy} l1.8,1.9 l3.4,-3.6" class="m-check"/>`);
       return;
     }
@@ -185,7 +186,7 @@ function progressChart({ points, rewards, target, now, rate = 1, width = 720, he
     else upcoming.push({ x: xx, y: yy, rewards: [{ rw, tHit }] });
   });
   // Labels keep off every marker too (a label just clears its own).
-  for (const g of upcoming) placed.push({ left: g.x - 12, right: g.x + 12, top: g.y - 12, bottom: g.y + 12 });
+  for (const g of upcoming) placed.push({ left: g.x - 12, right: g.x + 12, top: g.y - 12, bottom: g.y + 12, gap: 1 });
   // Paused, there's no telling when: say how long after resuming instead.
   const after = (t) => durLabel((t - now) / CHART_MIN);
   const textOf = (g) => {
@@ -198,31 +199,45 @@ function progressChart({ points, rewards, target, now, rate = 1, width = 720, he
   };
   const tipOf = (g) => g.rewards.map(({ rw, tHit }) => `${rw.name} · ${resume ? `${after(tHit)} after resuming` : clockLabel(tHit)}`).join('\n');
   const final = upcoming.find((g) => g.rewards.some(({ rw }) => rw === last));
-  // Where nothing fits the whole label, just when (the marker's picture and tooltip say what).
+  // Just when (the marker's picture and tooltip say what).
   const shortOf = (g) => {
     const [first, end] = [g.rewards[0], g.rewards.at(-1)];
     if (resume) return g.rewards.length > 1 ? `${after(first.tHit)}–${after(end.tHit)} in` : `${after(first.tHit)} in`;
     return g.rewards.length > 1 ? `${clockLabel(first.tHit)}–${clockLabel(end.tHit)}` : clockLabel(first.tHit);
   };
-  for (const g of final ? [final, ...upcoming.filter((u) => u !== final)] : upcoming) {
-    // Beside its marker on the left (where the climbing line leaves room), else above, else below;
-    // the final one, else higher up, or above it anyway. With no room, another goes without.
-    const isFinal = g === final;
-    const spots = (text) =>
-      [
-        [g.x - 20, g.y, 'end'],
+  const fixed = placed.length;
+  // Every label with its reward's name if they all fit, else all with just when (one way or the
+  // other, so they read alike); the final one always says when it's done.
+  const lay = (short) => {
+    placed.length = fixed;
+    const out = [];
+    let missed = 0;
+    for (const g of final ? [final, ...upcoming.filter((u) => u !== final)] : upcoming) {
+      // Above its marker, else to its right a little lower (under the climbing line there's room),
+      // else below, else on its left; the final one, else higher up, or above it anyway. With no
+      // room, another goes without.
+      const isFinal = g === final;
+      const text = short && !isFinal ? shortOf(g) : textOf(g);
+      const spots = [
         [g.x, g.y - 27, 'middle'],
+        [g.x + 20, g.y + 10, 'start'],
         [g.x, g.y + 27, 'middle'],
+        [g.x - 20, g.y, 'end'],
         ...(isFinal ? [[g.x, g.y - 54, 'middle']] : []),
-      ].map(([lx, ly, anchor]) => ({ text, lx, ly, anchor, box: pillBox(lx, ly, text, { anchor, ...bounds }) }));
-    const fits = ({ box }) => box.top >= pad.t - 14 && box.bottom <= bottom + 4 && !placed.some((b) => overlaps(b, box));
-    const full = spots(textOf(g));
-    const spot = full.find(fits) ?? (isFinal ? null : spots(shortOf(g)).find(fits)) ?? (isFinal ? full[1] : null);
-    if (spot) {
+      ].map(([lx, ly, anchor]) => ({ lx, ly, anchor, box: pillBox(lx, ly, text, { anchor, ...bounds }) }));
+      const fits = ({ box }) => box.top >= pad.t - 14 && box.bottom <= bottom + 4 && !placed.some((b) => overlaps(b, box));
+      const spot = spots.find(fits) ?? (isFinal ? spots[0] : null);
+      if (!spot) {
+        missed++;
+        continue;
+      }
       placed.push(spot.box);
-      labels.push(pill(spot.lx, spot.ly, spot.text, { cls: isFinal ? 'p-final' : 'p-next', anchor: spot.anchor, ...bounds }));
+      out.push(pill(spot.lx, spot.ly, text, { cls: isFinal ? 'p-final' : 'p-next', anchor: spot.anchor, ...bounds }));
     }
-  }
+    return { out, missed };
+  };
+  const full = lay(false);
+  labels.push(...(full.missed ? lay(true) : full).out);
   upcoming.forEach((g, i) => {
     const { x: xx, y: yy } = g;
     const rw = g.rewards.at(-1).rw;

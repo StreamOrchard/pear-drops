@@ -47,11 +47,23 @@ test('a channel row with none of its channels live says so, and Market Hours has
   assert.equal(await a.win.locator(row(805)).count(), 0, 'its only drop is channel-only');
 });
 
-test('opened, a channel row lists its channels, each with a live dot', async () => {
+const resize = (width, height) => a.app.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows().find((w) => /index\.html$/.test(w.webContents.getURL())).setBounds(size), { width, height });
+
+test('opened, a channel row lists its channels, each with a live dot, or past a line of them, how many are live and offline', async () => {
   await a.win.click(`${row('ev:cozy-hours')} .cat-row`);
-  await until(a.win, () => document.querySelectorAll('.cat[data-cat-id="ev:cozy-hours"] .row-chan').length === 3, 'its three channels');
+  // At 1280×800 its three channels don't fit on a line of the Queue: counts, with their names in the tooltips.
+  await until(a.win, () => document.querySelectorAll('.cat[data-cat-id="ev:cozy-hours"] .row-chans.counts .row-chan').length === 2, 'its counts');
+  const counts = await a.win.$$eval('.cat[data-cat-id="ev:cozy-hours"] .row-chan', (els) => els.map((e) => [e.textContent.trim(), e.dataset.tip, e.classList.contains('live')]));
+  assert.deepEqual(counts, [
+    ['2 live', 'NightOwl, LofiLane', true],
+    ['1 offline', 'Tidepool', false],
+  ]);
+  // Wider, they fit: each by name, with its live dot.
+  await resize(1720, 1000);
+  await until(a.win, () => document.querySelectorAll('.cat[data-cat-id="ev:cozy-hours"] .row-chan img').length === 3, 'its three channels');
   const live = await a.win.$$eval('.cat[data-cat-id="ev:cozy-hours"] .row-chan.live', (els) => els.map((e) => e.textContent.trim()).sort());
   assert.deepEqual(live, ['LofiLane', 'NightOwl']);
+  await resize(1280, 800);
   await a.win.click(`${row('ev:cozy-hours')} .cat-row`);
 });
 
