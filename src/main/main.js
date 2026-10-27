@@ -642,6 +642,12 @@ function setupDemo() {
       while (farmer.ticking) await new Promise((r) => setTimeout(r, 50));
       await farmer.tick();
     },
+    /** A big drop: an organiser's raffle, eleven rewards on dozens of channels, with a page to link your account on. */
+    bigDrop: async (units) => {
+      demo.api.addBigDrop(units);
+      while (farmer.ticking) await new Promise((r) => setTimeout(r, 50));
+      await farmer.tick({ force: true });
+    },
     /** Kick stops listing a drop (it ended or was taken down), and re-check. */
     endDrop: async (campaignId) => {
       demo.api.endCampaign(campaignId);
