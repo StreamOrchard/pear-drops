@@ -8,7 +8,7 @@ A desktop app that collects Kick **emote and badge drops** for you. Sign in once
 - claims rewards the moment they unlock
 - moves on to the next category when one is done
 
-Game drops that need a linked game account are skipped unless you turn them on.
+Game drops and giveaways (rewards from a game or another site, like in-game items or raffle tickets, which usually need your Kick account linked there) are skipped unless you turn them on.
 
 ## Install
 

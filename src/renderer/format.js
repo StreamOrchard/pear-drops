@@ -335,16 +335,38 @@ function channelNames(chs, { or = false } = {}) {
   return `${n[0]}, ${n[1]} +${n.length - 2}`;
 }
 
+// A drop with this many channels or more, none of them its own, is pictured by its reward.
+const MANY_CHANNELS = 4;
+
 /**
- * A queue row's picture: a category's art; for a drop limited to certain channels, its channel's
- * avatar with the category's art as a badge, or two avatars overlapping and "+N" for the rest.
+ * A queue row's one picture: a category's art; for a drop limited to certain channels, its own
+ * channel's avatar (starladder for Starladder LTD's), or with many channels and none its own, the
+ * reward it's working toward; otherwise its first channel's.
+ */
+function rowImage(cat) {
+  if (cat.kind === 'category' || !cat.channels?.length) return cat.image;
+  const first = cat.channels[0];
+  if (first.host || cat.channels.length < MANY_CHANNELS) return first.avatar ?? cat.image;
+  const rewards = (cat.campaigns ?? []).flatMap((c) => (c.rewards ?? []).filter((r) => r.tracked !== false));
+  return (rewards.find((r) => !r.claimed && r.image) ?? rewards.find((r) => r.image))?.image ?? first.avatar ?? cat.image;
+}
+
+/**
+ * A queue row's picture: a category's art; for a drop limited to certain channels, one picture
+ * (rowImage) with the category's art as a badge, or for two or three channels, two avatars
+ * overlapping and "+N" for the rest.
  */
 function rowArt(cat, cls = 'cat-art') {
   if (cat.kind === 'category' || !cat.channels?.length) return img(cat.image, cls, cat.name);
   const chs = cat.channels;
   const av = (ch) => img(ch.avatar, 'av', ch.username);
-  if (chs.length === 1) return `<span class="row-art one ${cls}-row" data-tip="${esc(chs[0].username)} · ${esc(cat.category?.name ?? '')}">${av(chs[0])}${img(cat.category?.image, 'cat-badge')}</span>`;
-  return `<span class="row-art many ${cls}-row" data-tip="${esc(chs.map((c) => c.username).join(', '))} · ${esc(cat.category?.name ?? '')}">${chs.slice(0, 2).map(av).join('')}${chs.length > 2 ? `<span class="more">+${chs.length - 2}</span>` : ''}</span>`;
+  const where = esc(cat.category?.name ?? '');
+  if (chs.length === 1 || chs[0].host || chs.length >= MANY_CHANNELS) {
+    const who = esc(chs.length === 1 ? chs[0].username : channelNames(chs));
+    const reward = !chs[0].host && chs.length >= MANY_CHANNELS;
+    return `<span class="row-art one${reward ? ' reward' : ''} ${cls}-row" data-tip="${who} · ${where}">${img(rowImage(cat), 'av', reward ? cat.name : chs[0].username)}${img(cat.category?.image, 'cat-badge')}</span>`;
+  }
+  return `<span class="row-art many ${cls}-row" data-tip="${esc(chs.map((c) => c.username).join(', '))} · ${where}">${chs.slice(0, 2).map(av).join('')}${chs.length > 2 ? `<span class="more">+${chs.length - 2}</span>` : ''}</span>`;
 }
 
 /**

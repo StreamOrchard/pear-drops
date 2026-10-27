@@ -1,4 +1,4 @@
-/* global chestMark, fillingCrates, commands, palette, initPalette, initPaletteItems, developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, whyModal, loadWhy, rowArt, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
+/* global chestMark, fillingCrates, commands, palette, initPalette, initPaletteItems, developerPane, developerActions, fitDeveloper, devMenuButton, placeDevMenu, dev, whyModal, loadWhy, rowArt, rowImage, channelNames, rewardChest, rewardCard, playReveal, endReveal, revealDone, revealFor, openTab, activityPane, activityActions, act, fitActivity, closeActivity, previewAttrs, updatesPane, updateChip, whatsNewModal, updateActions, initUpdates, renderHistory, loadHistory, historyActions, hist, icon, brandMark, progressRing, progressChart, heartbeatStrip, sparkBars, MIN, $, esc, fmtDur, fmtMin, fmtClock, fmtAgo, fmtCount, fmtEnds, fmtEta, fmtFinish, popupWall, streamHealth, streamNotice, setHTML, widthOf, img, applyFont */
 
 let state = null;
 const ui = {
@@ -546,7 +546,7 @@ function idleChart(f) {
     return { mode: 'done', items: collected.map((r) => ({ name: r.name, image: r.image })), sub: 'Nothing left to farm' };
   }
   // A blip per queue row: a category's art, or a channel row's first channel, with its drop's name.
-  const items = left.map((c) => ({ name: c.name, image: c.kind === 'category' ? c.image : (c.channels[0]?.avatar ?? c.image) }));
+  const items = left.map((c) => ({ name: c.name, image: rowImage(c) }));
   if (f.paused) return { mode: 'paused', items, sub: 'None of the remaining drops’ channels are live' };
   if (f.status.code === 'error') return { mode: 'scan', tone: 'warn', items, sub: 'Waiting for Kick to answer' };
   const drops = left.reduce((n, c) => n + c.campaigns.filter((x) => x.needsWatching).length, 0);
@@ -710,13 +710,13 @@ function queuePanel(f) {
               return `<div class="campaign">
                 <div class="campaign-head">
                   <span class="campaign-name">${esc(c.name)}</span>
-                  <button class="btn sm hist-btn" data-action="hist-campaign" data-id="${esc(c.id)}" data-tip="This drop's history">${icon('list')} History</button>${detailsButton(c.url)}
+                  <button class="btn sm hist-btn" data-action="hist-campaign" data-id="${esc(c.id)}" data-tip="This drop's history">${icon('list')} History</button>${detailsButton(c.url)}${connectButton(c.connectUrl)}
                   ${c.watching ? '<span class="chip green">Watching</span>' : ''}
                   <span class="chip flat">${c.channels.length ? '' : 'any channel · '}${esc(c.org ?? '')}</span>
                   <div class="spacer"></div>
                   <span class="card-sub num">${c.units}/${c.targetUnits || '—'}m${fc && c.needsWatching ? ` · ${fmtMin(fc.doneMinutes)} left` : ''}</span>
                 </div>
-                ${c.channels.length ? `<div class="row-chans">${c.channels.map((ch) => { const on = cat.liveChannels?.includes(ch.id); return `<span class="row-chan ${on ? 'live' : ''}" data-tip="${on ? 'Live now' : 'Offline'}">${img(ch.avatar)}<i></i>${esc(ch.username)}</span>`; }).join('')}</div>` : ''}
+                ${campaignChannels(c, cat)}
                 ${campaignTrack(c)}
                 <div class="campaign-rewards">${c.rewards
                   .map(
@@ -793,6 +793,43 @@ function detailsButton(url) {
     host = new URL(url).hostname.replace(/^www\./, '');
   } catch {}
   return `<button class="btn sm hist-btn" data-action="open-link" data-url="${esc(url)}" data-tip="${esc(host ? `Opens ${host}` : 'More about this drop')}">${icon('external')} Details</button>`;
+}
+
+/** Where a drop asks you to link your Kick account (a game's, or the organiser's site), as a Connect button. */
+function connectButton(url) {
+  if (!url) return '';
+  let host = '';
+  try {
+    host = new URL(url).hostname.replace(/^www\./, '');
+  } catch {}
+  return `<button class="btn sm hist-btn" data-action="open-link" data-url="${esc(url)}" data-tip="${esc(`Link your Kick account${host ? ` on ${host}` : ''}: this drop asks for it`)}">${icon('link')} Connect</button>`;
+}
+
+// Measures channel names in the Queue's font, to tell whether a drop's channels fit on a line.
+let chipMeasure = null;
+
+/**
+ * A drop's channels in its opened row: each with a live dot while they fit on one line, and past
+ * that, how many are live and how many offline.
+ */
+function campaignChannels(c, cat) {
+  if (!c.channels.length) return '';
+  const live = c.channels.filter((ch) => cat.liveChannels?.includes(ch.id));
+  if (!chipMeasure) {
+    chipMeasure = document.createElement('canvas').getContext('2d');
+    chipMeasure.font = `12px ${getComputedStyle(document.body).fontFamily}`;
+  }
+  // A chip: its picture, dot and gaps and padding (47px) and its name, 6px apart.
+  const needed = c.channels.reduce((w, ch) => w + 53 + chipMeasure.measureText(ch.username ?? '').width, -6);
+  const room = ($('.cat-campaigns')?.clientWidth ?? 380) - 82;
+  if (needed <= room) {
+    return `<div class="row-chans">${c.channels.map((ch) => { const on = live.includes(ch); return `<span class="row-chan ${on ? 'live' : ''}" data-tip="${on ? 'Live now' : 'Offline'}">${img(ch.avatar)}<i></i>${esc(ch.username)}</span>`; }).join('')}</div>`;
+  }
+  const names = (chs) => chs.slice(0, 8).map((ch) => ch.username).join(', ') + (chs.length > 8 ? ` and ${chs.length - 8} more` : '');
+  const off = c.channels.length - live.length;
+  return `<div class="row-chans counts">${live.length ? `<span class="row-chan live" data-tip="${esc(names(live))}"><i></i>${live.length} live</span>` : ''}${
+    off ? `<span class="row-chan" data-tip="${esc(names(c.channels.filter((ch) => !live.includes(ch))))}"><i></i>${off} offline</span>` : ''
+  }</div>`;
 }
 
 /** Why Kick refused a reward's claim, with a button to link the game account if that's it. */
@@ -1184,7 +1221,7 @@ const SETTINGS_ROWS = [
     type: 'switch',
     words: ['crate', 'chest', 'event', 'idle'],
   },
-  { page: 'farming', id: 'includeGameDrops', title: 'Include game drops', sub: 'Also farm rewards that need a linked game account.', type: 'switch' },
+  { page: 'farming', id: 'includeGameDrops', title: 'Include game drops & giveaways', sub: 'Also farm rewards from a game or another site, like in-game items and raffle tickets. Most need your Kick account linked there.', type: 'switch', words: ['giveaway', 'raffle', 'game'] },
   { page: 'recovery', id: 'stallMinutes', title: 'Recover a stalled stream after', sub: 'With no progress for this long, reload the stream, then switch to another.', type: 'range', min: 5, max: 60, step: 1, unit: 'min', words: ['stall', 'stuck'] },
   {
     page: 'recovery',

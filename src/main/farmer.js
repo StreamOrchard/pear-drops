@@ -58,6 +58,49 @@ function rowKey(campaign, categoryId) {
 /** An https link from Kick (a campaign's About page, a connect link), or null. */
 const httpsLink = (url) => (typeof url === 'string' && /^https:\/\/[^\s"'<>]+$/.test(url) ? url : null);
 
+// Words in an organiser's name or a web address that say nothing about whose drop it is.
+const PLAIN_WORDS = new Set(['www', 'com', 'net', 'org', 'gg', 'tv', 'io', 'kick', 'drops', 'https', 'http', 'ltd', 'llc', 'inc', 'gmbh', 'the', 'official']);
+
+/**
+ * A drop's own channel, if it has one. Kick doesn't say which is the host (it lists the channels
+ * by id), so it's the one named after the organiser or its site: Starladder LTD, starladder.com,
+ * starladder.
+ */
+function hostChannel(campaign) {
+  const channels = campaign.channels ?? [];
+  const flat = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const names = new Set();
+  const words = String(campaign.organization?.name ?? '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w && !PLAIN_WORDS.has(w));
+  if (words.length) names.add(words.join(''));
+  for (const w of words) if (w.length >= 4) names.add(w);
+  for (const url of [campaign.organization?.url, campaign.url, campaign.connect_url]) {
+    let host = '';
+    try {
+      host = new URL(url).hostname;
+    } catch {}
+    for (const w of host.toLowerCase().split('.')) if (w.length >= 4 && !PLAIN_WORDS.has(w)) names.add(w);
+  }
+  return channels.find((ch) => names.has(flat(ch.slug)) || names.has(flat(ch.user?.username))) ?? null;
+}
+
+/**
+ * A row's channels in the order to show them (its picture and first name come from the first):
+ * the drop's own channel, then the live ones (those you follow, then most watched), then the
+ * offline ones (those you follow, then by name). Kick's own order (by id) says nothing.
+ */
+function orderChannels(channels, streams, followed) {
+  const viewers = new Map(streams.map((s) => [s.channelId, s.viewers ?? 0]));
+  const follows = (ch) => followed.has(String(ch.slug ?? '').toLowerCase());
+  return [...channels].sort(
+    (a, b) =>
+      Number(!!b.host) - Number(!!a.host) ||
+      Number(viewers.has(b.id)) - Number(viewers.has(a.id)) ||
+      Number(follows(b)) - Number(follows(a)) ||
+      (viewers.get(b.id) ?? 0) - (viewers.get(a.id) ?? 0) ||
+      String(a.username ?? a.slug).localeCompare(String(b.username ?? b.slug), undefined, { sensitivity: 'base' }),
+  );
+}
+
 /**
  * Why Kick refused a claim, from its answer ({ data: { type, details, connect_url } }, which is
  * what kick.com's own drops page reads): what to say, a link to connect a game account if Kick
@@ -697,6 +740,7 @@ class Farmer extends EventEmitter {
         const rewards = this.modelRewards(c, p, settings);
         const tracked = rewards.filter((r) => r.tracked);
         const open = tracked.filter((r) => !r.claimed);
+        const host = hostChannel(c);
         const targetUnits = Math.max(0, ...open.map((r) => r.required));
         const next = open.find((r) => units < r.required) ?? null;
         return {
@@ -711,7 +755,9 @@ class Farmer extends EventEmitter {
           // A campaign that's part of a Kick event (its url is kick.com/events/<slug>).
           event: eventOf(c.url),
           url: httpsLink(c.url),
-          channels: c.channels.map((ch) => ({ id: ch.id, slug: ch.slug, username: ch.user?.username, avatar: ch.user?.profile_picture })),
+          // Where to link a game account (or the organiser's site, as Stake's raffle), if it asks.
+          connectUrl: httpsLink(c.connect_url),
+          channels: c.channels.map((ch) => ({ id: ch.id, slug: ch.slug, username: ch.user?.username, avatar: ch.user?.profile_picture, ...(ch === host ? { host: true } : {}) })),
           units,
           rewards,
           hasTracked: tracked.length > 0,
@@ -766,6 +812,8 @@ class Farmer extends EventEmitter {
       const ends = (active.length ? active : cat.campaigns).map((c) => new Date(c.endsAt).getTime());
       const weight = RARITY_WEIGHT[settings.smartRarity] ?? 1;
       const liveEnd = Math.min(...ends.map((t) => now + Math.max(0, t - now) * (liveRate ?? 1) ** weight));
+      cat.channels = orderChannels(cat.channels, streams, this.followed);
+      for (const c of cat.campaigns) c.channels = orderChannels(c.channels, streams, this.followed);
       return {
         urgent,
         feasible,
@@ -1817,12 +1865,12 @@ class Farmer extends EventEmitter {
     const gameOnly = settings.includeGameDrops
       ? 0
       : this.rawCampaigns.filter((k) => k.category?.id && k.status !== 'expired' && new Date(k.starts_at) <= now && new Date(k.ends_at) > now && !campaigns.some((x) => x.id === k.id)).length;
-    const gameNote = gameOnly ? `${gameOnly} game drop${gameOnly > 1 ? 's' : ''} left out (Settings › Farming › Include game drops)` : '';
+    const gameNote = gameOnly ? `${gameOnly} game drop${gameOnly > 1 ? 's' : ''} left out (Settings › Farming › Include game drops & giveaways)` : '';
     if (!c) add('drop', false, 'No active drop with emotes or badges', gameNote);
     else if (row && !row.enabled) add('drop', false, `${row.name} is switched off in your queue`, 'Its switch in the Queue tab');
     else {
       const games = c.rewards.filter((r) => !r.tracked).length;
-      add('drop', true, `${c.name} is active (ends in ${fmtSpan(new Date(c.endsAt).getTime() - now)})`, games ? `${games} game reward${games > 1 ? 's' : ''} in it left out (Settings › Farming › Include game drops)` : '');
+      add('drop', true, `${c.name} is active (ends in ${fmtSpan(new Date(c.endsAt).getTime() - now)})`, games ? `${games} game reward${games > 1 ? 's' : ''} in it left out (Settings › Farming › Include game drops & giveaways)` : '');
     }
 
     // 3. A reward still needs watch time, rather than a claim.
@@ -2082,4 +2130,4 @@ class Farmer extends EventEmitter {
   }
 }
 
-module.exports = { Farmer, rewardKind, logFromHistory, claimFailure };
+module.exports = { Farmer, rewardKind, logFromHistory, claimFailure, hostChannel, orderChannels };

@@ -1088,12 +1088,40 @@ test('drops go in rows: a category\'s open drops together, a channel-only drop o
   assert.equal(pair.kind, 'channels');
   assert.equal(pair.name, 'Campaign owl', 'named after the drop that ends first');
   assert.equal(pair.otherDrops, 1);
-  assert.deepEqual(pair.channels.map((c) => c.slug), ['owl', 'lane']);
+  assert.deepEqual(pair.channels.map((c) => c.slug), ['lane', 'owl'], 'neither live: by name');
   assert.deepEqual(pair.category, { id: 7, name: 'Just Chatting', slug: undefined, image: null });
   assert.equal(pair.categoryId, 7);
   // Markets has only a channel-only drop: no row of its own, just the drop's.
   assert.equal(rows[8], undefined);
   assert.equal(rows['ch:21'].category.name, 'Markets');
+});
+
+test('hostChannel: the channel named after the organiser or its site, as starladder for Starladder LTD', () => {
+  const { hostChannel } = require('../../../src/main/farmer');
+  const chans = [ch('theunknown', 1), ch('bandurka', 2), ch('starladder', 3)].map((c) => ({ ...c, user: { username: c.slug } }));
+  assert.equal(hostChannel({ organization: { name: 'Starladder LTD' }, channels: chans })?.slug, 'starladder', 'by its name, less "LTD"');
+  assert.equal(hostChannel({ organization: { name: 'Org', url: 'http://www.starladder.com' }, channels: chans })?.slug, 'starladder', 'by its site');
+  assert.equal(hostChannel({ organization: { name: 'Org' }, url: 'https://stake-ranked.starladder.com/', channels: chans })?.slug, 'starladder', "by the drop's page");
+  assert.equal(hostChannel({ organization: { name: 'Org' }, connect_url: 'https://drops.starladder.com/', channels: chans })?.slug, 'starladder', 'by its link page');
+  const riot = [{ id: 9, slug: 'riot-games', user: { username: 'Riot_Games' } }];
+  assert.equal(hostChannel({ organization: { name: 'Riot Games' }, channels: riot })?.id, 9, 'a name of two words, run together');
+  assert.equal(hostChannel({ organization: { name: 'KICK' }, url: 'https://kick.com/category/crypto', channels: [{ id: 5, slug: 'kick' }] }), null, 'not "kick"');
+  assert.equal(hostChannel({ organization: { name: 'Starladder LTD', url: 'not a url' }, channels: [] }), null);
+  assert.equal(hostChannel({}), null);
+});
+
+test("a row's channels: its own first, then live ones (followed, then most watched), then offline ones (followed, then by name)", async () => {
+  const chans = [ch('zed', 1), ch('amy', 2), ch('bigcast', 3), ch('mine', 4), ch('starladder', 5), ch('pal', 6), ch('Bob', 7)];
+  const c = campaign('sl', { category: CHAT, channels: chans, org: 'Starladder LTD', connect: 'https://drops.starladder.com/' });
+  const { farmer } = setup({ campaigns: [c], units: { sl: 1 }, followed: ['mine', 'pal'], streams: { 7: [live('bigcast', 3, 5000), live('zed', 1, 40), live('mine', 4, 10)] } });
+  await farmer.refresh({ force: true });
+  const row = farmer.model.categories[0];
+  assert.deepEqual(row.channels.map((x) => x.slug), ['starladder', 'mine', 'bigcast', 'zed', 'pal', 'amy', 'Bob']);
+  assert.equal(row.channels[0].host, true);
+  assert.equal(row.channels.filter((x) => x.host).length, 1);
+  assert.deepEqual(row.campaigns[0].channels.map((x) => x.slug), row.channels.map((x) => x.slug), "the drop's own list in the same order");
+  assert.equal(row.campaigns[0].connectUrl, 'https://drops.starladder.com/');
+  assert.deepEqual(row.liveChannels.sort(), [1, 3, 4]);
 });
 
 test('a long list of channels gets a short row id, and an event\'s drop a row of the event', async () => {
@@ -1279,7 +1307,7 @@ test('explain: no drop with emotes or badges, with the game drops it leaves out'
   const f = failed(farmer.explain());
   assert.equal(f.step, 'drop');
   assert.equal(f.text, 'No active drop with emotes or badges');
-  assert.equal(f.note, '1 game drop left out (Settings › Farming › Include game drops)');
+  assert.equal(f.note, '1 game drop left out (Settings › Farming › Include game drops & giveaways)');
 });
 
 test('explain: a drop whose queue row is switched off', async () => {
