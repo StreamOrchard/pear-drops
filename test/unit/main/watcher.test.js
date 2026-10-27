@@ -99,12 +99,12 @@ function fakeContents(id, { type = 'webview', host = null } = {}) {
   });
   return wc;
 }
-function setupWatcher(settings = {}) {
+function setupWatcher(settings = {}, { silent = false } = {}) {
   const host = fakeContents(1, { type: 'window' });
   const win = { webContents: host, isDestroyed: () => false };
   const all = new Map([[1, host]]);
   const ipc = { handlers: {}, on(name, fn) { this.handlers[name] = fn; } };
-  const w = new Watcher(() => win, () => settings, { ipcMain: ipc, contents: { fromId: (id) => all.get(id) ?? null } });
+  const w = new Watcher(() => win, () => settings, { ipcMain: ipc, contents: { fromId: (id) => all.get(id) ?? null }, silent });
   return { w, host, all, ipc };
 }
 
@@ -188,4 +188,49 @@ test('the player’s reports count only from its own page: the chat’s only for
   const q = { sender: player };
   ipc.handlers['watch:quality'](q);
   assert.equal(q.returnValue, null);
+});
+
+test('the stream’s sound: only the player is unmuted, a new stream’s player keeps it, and the chat never is', () => {
+  const { w, host, all } = setupWatcher({ unmutePlayer: false });
+  w.ensureViews();
+  const player = fakeContents(5, { host });
+  const chat = fakeContents(6, { host });
+  for (const c of [player, chat]) all.set(c.id, c);
+  w.watch('arcadia');
+  w.attach('player', 1, 5);
+  w.attach('chat', 1, 6);
+  assert.equal(w.sound, false, 'muted to start with');
+  assert.equal(player.muted, true);
+  w.setSound(true);
+  assert.equal(player.muted, false);
+  assert.equal(chat.muted, true);
+  assert.deepEqual(player.sent.at(-1), ['watch:config', { sound: true }], 'the player itself is unmuted too, whatever the setting');
+  player.emit('did-finish-load');
+  assert.deepEqual(player.sent.at(-1), ['watch:config', { unmutePlayer: false, sound: true }], 'and again on each load');
+
+  // Another stream's player: unmuted from the start.
+  player.emit('destroyed');
+  w.ensureViews();
+  const next = fakeContents(7, { host });
+  all.set(7, next);
+  w.attach('player', w.spec.gen, 7);
+  assert.equal(next.muted, false);
+  w.setSound(false);
+  assert.equal(next.muted, true);
+  assert.deepEqual(next.sent.at(-1), ['watch:config', { sound: false }]);
+});
+
+test('no player yet: the sound is only remembered; silent (the hidden test runs): never unmuted', () => {
+  const { w } = setupWatcher();
+  w.setSound(true);
+  assert.equal(w.sound, true);
+  const quiet = setupWatcher({}, { silent: true });
+  quiet.w.ensureViews();
+  const player = fakeContents(5, { host: quiet.host });
+  quiet.all.set(5, player);
+  quiet.w.watch('arcadia');
+  quiet.w.attach('player', 1, 5);
+  quiet.w.setSound(true);
+  assert.equal(quiet.w.sound, true, 'the button still says it’s on');
+  assert.equal(player.muted, true);
 });

@@ -494,6 +494,24 @@ test('a notice of any kind is a full-width box on the dashboard and tray (a "swi
   await a.app.evaluate(() => { global.pdDebug.farmer.notice = null; global.pdDebug.farmer.changed(); });
 });
 
+test('the stream’s sound: Unmute beside the stream unmutes only its player (silent in tests), and Mute puts it back', async () => {
+  const muted = () =>
+    a.app.evaluate(() => {
+      const w = global.pdDebug.watcher;
+      return { sound: w.sound, player: w.view?.webContents.isAudioMuted(), chat: w.chatView?.webContents.isAudioMuted() };
+    });
+  assert.equal(await a.win.textContent('#player-foot .sound-btn'), 'Unmute');
+  assert.equal((await muted()).sound, false, 'muted at launch');
+  await a.win.click('#player-foot [data-action="sound"]');
+  await until(a.win, () => document.querySelector('#player-foot .sound-btn.on')?.textContent === 'Mute', 'Mute');
+  assert.deepEqual(await muted(), { sound: true, player: true, chat: true }, 'on, but the hidden test runs stay silent');
+  await until(a.win, () => /sound on/.test(document.querySelector('#stats').textContent), 'the player card says sound on');
+  await a.win.click('#player-foot [data-action="sound"]');
+  await until(a.win, () => document.querySelector('#player-foot .sound-btn:not(.on)')?.textContent === 'Unmute', 'Unmute again');
+  assert.equal((await muted()).sound, false);
+  assert.match(await a.win.textContent('#stats'), /window muted/);
+});
+
 test('the player header follows and unfollows the channel', async () => {
   await until(a.win, () => document.querySelector('#player-head .follow-btn'), 'the follow button');
   const slug = await a.win.getAttribute('#player-head .follow-btn', 'data-slug');

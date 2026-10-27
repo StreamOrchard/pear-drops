@@ -66,7 +66,7 @@ window.addEventListener('message', (event) => {
   ipcRenderer.send('watch:event', { kind, channelId, reason, event: name, target });
 });
 
-let config = { unmutePlayer: true };
+let config = { unmutePlayer: true, sound: false };
 ipcRenderer.on('watch:config', (_event, value) => {
   config = { ...config, ...value };
 });
@@ -121,9 +121,10 @@ function report() {
     pausedSince = null;
   }
 
-  // The window itself is muted by the app, so the player can stay unmuted. A muted
-  // player is the thing browsers throttle or pause in the background.
-  if (config.unmutePlayer && !unmuted && !video.paused && video.muted) {
+  // The window itself is muted by the app (unless its sound is turned on), so the player can stay
+  // unmuted. A muted player is the thing browsers throttle or pause in the background. With the
+  // sound on, it's unmuted whatever the setting says, or there'd be nothing to hear.
+  if ((config.unmutePlayer || config.sound) && !unmuted && !video.paused && video.muted) {
     video.muted = false;
     if (video.volume === 0) video.volume = 0.5;
     unmuted = true;

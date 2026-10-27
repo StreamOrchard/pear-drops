@@ -99,6 +99,8 @@ contextBridge.exposeInMainWorld('pd', {
     return () => ipcRenderer.removeListener('show-view', listener);
   },
   setPlayerBounds: (rect) => ipcRenderer.invoke('player:bounds', rect),
+  // The stream's sound, by the stream: on or off for this run.
+  setSound: (on) => ipcRenderer.invoke('player:sound', on === true),
   // The docked stream's <webview>s: which to have, and each one's contents once attached.
   playerSpec: () => ipcRenderer.invoke('player:spec'),
   onPlayerSpec: (cb) => {

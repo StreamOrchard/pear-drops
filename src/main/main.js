@@ -846,6 +846,11 @@ function registerIpc() {
     return !!url;
   });
   mainIpc.handle('player:bounds', (_e, rect) => watcher.setBounds(rectArg(rect)));
+  mainIpc.handle('player:sound', (_e, on) => {
+    watcher.setSound(on === true);
+    farmer.changed();
+    return watcher.sound;
+  });
   mainIpc.handle('player:spec', () => watcher.spec);
   mainIpc.handle('player:attached', (_e, role, gen, id) => watcher.attach(String(role), Number(gen), Number(id)));
   // Settings › Developer: its lists a page at a time, the report, Copy player state, Why isn't this farming?, Inspect.
@@ -1063,7 +1068,7 @@ app.whenReady().then(async () => {
   };
   if (DEMO) demo.installStage(session.fromPartition(PARTITION), { eventSeconds: Number(env('PD_DEMO_EVENT_SECONDS')) || 120 });
   createMainWindow();
-  watcher = new Watcher(() => mainWindow, () => store.get());
+  watcher = new Watcher(() => mainWindow, () => store.get(), { silent: HIDDEN });
   history = new History(db).load();
   // The data was damaged: say what was put back, in History.
   if (db.restored) {
