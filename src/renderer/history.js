@@ -214,7 +214,7 @@ function sessionsTable(d) {
     .map(
       (s) => `<tr>
         <td class="sess-stream"><div class="sess-cell">${img(s.avatar, 'avatar xs')}<span class="sess-who"><span class="sess-name"><b>${esc(s.channel)}</b>${s.manual ? ' <span class="chip blue tiny">you</span>' : ''}</span>${s.title ? `<span class="sess-title" data-tip="${esc(s.title)}">${esc(s.title)}</span>` : ''}</span></div></td>
-        <td class="ellipsis">${esc((s.campaigns ?? []).join(', ') || s.category || '')}</td>
+        <td class="ellipsis">${s.reward ? 'Daily reward' : esc((s.campaigns ?? []).join(', ') || s.category || '')}</td>
         <td class="nowrap muted num">${fmtStamp(s.start)}</td>
         <td class="r num">${fmtDur(s.ms)}</td>
         <td class="r num"><b class="pos">${s.credited}m</b></td>
