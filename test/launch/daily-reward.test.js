@@ -382,6 +382,12 @@ test('the tray: an event’s crate waiting makes its chest hop; its tab opens, a
     return { slots: tiles.length, inside: tiles.every((t) => t.left >= row.left && t.right <= row.right + 0.5) };
   });
   assert.deepEqual(strip, { slots: 8, inside: true }, 'a slot for each of its 8 days, in the popover too');
+  assert.deepEqual(
+    await pop.$$eval('.dr-won-tile:not(.open) small', (els) => els.map((e) => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/.test(e.textContent) || e.textContent === 'Today')),
+    [true, true, true, true],
+    'short day names, so 8 fit: no "Yesterday"',
+  );
+  assert.match(await pop.getAttribute('.dr-won-tile:nth-child(3)', 'data-tip'), / · Yesterday$/, 'its tooltip still says it');
   await pop.click('[data-action="reward-back"]');
   await until(pop, () => document.querySelector('.tray-now'), 'back to farming');
   await a.demo((d) => d.daily({ event: null }));

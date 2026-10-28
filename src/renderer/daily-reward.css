@@ -1008,11 +1008,12 @@
   box-shadow: none;
   border: 1px dashed color-mix(in srgb, var(--faint) 70%, transparent);
   background: rgba(255, 255, 255, 0.02);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 650;
   color: var(--faint);
 }
 .dr-won-tile.xp small {
+  margin-top: -1px; /* its border's width: in line with the other days */
   font-weight: 400;
 }
 .dr-card.at-tray .dr-won-tile {
