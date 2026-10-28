@@ -353,11 +353,16 @@ test('a crate that gives watch time: the reveal and its page say how much, towar
   assert.match(await a.win.textContent('.dr-pop .dr-stage'), /\+30 min\s*watch time/);
   assert.match(await a.win.textContent('.dr-pop .dr-result'), /Level progress\s*\+30 min watch time towards Level 43/);
   assert.equal(events().findLast((e) => e.type === 'daily-reward').text, 'Winter Wonderland: +30 min watch time to Level 43');
+  // A day on the strip, a faint one: a day used, not a win.
+  assert.match(await a.win.textContent('.dr-pop .dr-won'), /Won this event\s*0/);
+  assert.equal(await a.win.evaluate(() => document.querySelector('.dr-pop .dr-won-tile.xp').firstChild.textContent), '+30m');
+  assert.equal(await a.win.getAttribute('.dr-pop .dr-won-tile.xp', 'data-tip'), '+30 min watch time · Today');
+  assert.equal(await a.win.locator('.dr-pop .dr-won-tile.xp img').count(), 0, 'no picture');
   await a.win.keyboard.press('Escape');
 });
 
 test('the tray: an event’s crate waiting makes its chest hop; its tab opens, and claims with the reveal right there', async () => {
-  await a.app.evaluate(() => global.pdDemo.daily({ event: 180, eventName: 'Holiday Cheer', eventWinner: 'gift-4' }));
+  await a.app.evaluate(() => global.pdDemo.daily({ event: 180, eventName: 'Holiday Cheer', eventWinner: 'gift-4', eventPast: 3, eventDays: 8 }));
   const pop = await tray();
   await until(pop, () => document.querySelector('.tray-head .dr-chest.crate.state-ready.theme-winter'), 'the event’s chest');
   assert.equal(await pop.evaluate(() => getComputedStyle(document.querySelector('.tray-head .dr-chest .chest-box')).animationName), 'dr-hop');
@@ -371,6 +376,18 @@ test('the tray: an event’s crate waiting makes its chest hop; its tab opens, a
   await pop.click('[data-action="reward-back"]');
   await until(pop, () => document.querySelector('.dr-card.at-tray.crate.state-claimed') && !document.querySelector('.dr-card.revealing'), 'its page, claimed');
   assert.ok(await pop.evaluate(() => document.querySelector('.dr-actions').getBoundingClientRect().bottom <= innerHeight), 'the page fits the popover');
+  const strip = await pop.evaluate(() => {
+    const row = document.querySelector('.dr-won-row').getBoundingClientRect();
+    const tiles = [...document.querySelectorAll('.dr-won-tile')].map((t) => t.getBoundingClientRect());
+    return { slots: tiles.length, inside: tiles.every((t) => t.left >= row.left && t.right <= row.right + 0.5) };
+  });
+  assert.deepEqual(strip, { slots: 8, inside: true }, 'a slot for each of its 8 days, in the popover too');
+  assert.deepEqual(
+    await pop.$$eval('.dr-won-tile:not(.open) small', (els) => els.map((e) => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/.test(e.textContent) || e.textContent === 'Today')),
+    [true, true, true, true],
+    'short day names, so 8 fit: no "Yesterday"',
+  );
+  assert.match(await pop.getAttribute('.dr-won-tile:nth-child(3)', 'data-tip'), / · Yesterday$/, 'its tooltip still says it');
   await pop.click('[data-action="reward-back"]');
   await until(pop, () => document.querySelector('.tray-now'), 'back to farming');
   await a.demo((d) => d.daily({ event: null }));

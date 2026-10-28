@@ -344,16 +344,22 @@ function prizeLine(won) {
 
 /**
  * The prizes an event has given, a slot a day: in the order they were won (the newest that fit),
- * then the empty days still to come.
+ * then the empty days still to come. A day that gave only watch time is a faint one: a day, not a win.
  */
 function prizeStrip(e, where) {
   const prizes = e.prizes ?? [];
+  // The tray's 8 slots are narrow: "Yesterday" is its day's name there (its tooltip still says it).
+  const label = (t) => (where === 'tray' && fmtWonDay(t) === 'Yesterday' ? new Date(t).toLocaleDateString([], { weekday: 'short' }) : fmtWonDay(t));
   if (!prizes.length) return '';
-  const slots = Math.max(prizes.length ? 1 : 0, Math.min(e.days ?? prizes.length, where === 'tray' ? 7 : 8));
+  const slots = Math.max(1, Math.min(e.days ?? prizes.length, 8));
   const shown = prizes.slice(0, slots).reverse(); // e.prizes is newest first
-  const tiles = shown.map((p) => `<span class="dr-won-tile r-${esc(p.rarity)}" data-tip="${esc([p.name, cardKind(p), fmtWonDay(p.at)].filter(Boolean).join(' · '))}">${img(p.image, '', p.name || cardKind(p))}<small>${fmtWonDay(p.at)}</small></span>`);
+  const tiles = shown.map((p) =>
+    p.xp
+      ? `<span class="dr-won-tile xp" data-tip="${esc(`+${fmtLeft(p.xp)} watch time · ${fmtWonDay(p.at)}`)}">+${p.xp < 60 ? `${p.xp}m` : `${Math.round(p.xp / 60)}h`}<small>${label(p.at)}</small></span>`
+      : `<span class="dr-won-tile r-${esc(p.rarity)}" data-tip="${esc([p.name, cardKind(p), fmtWonDay(p.at)].filter(Boolean).join(' · '))}">${img(p.image, '', p.name || cardKind(p))}<small>${label(p.at)}</small></span>`,
+  );
   const empty = '<span class="dr-won-tile open"></span>'.repeat(Math.max(0, slots - shown.length));
-  return `<div class="dr-won"><div class="dr-won-head"><span>Won this event</span><b>${n(prizes.length)}</b><span class="spacer"></span>${e.days ? `<span class="dr-won-days">${n(Math.min(prizes.length, e.days))} of ${n(e.days)} days</span>` : ''}</div>
+  return `<div class="dr-won"><div class="dr-won-head"><span>Won this event</span><b>${n(prizes.filter((p) => !p.xp).length)}</b><span class="spacer"></span>${e.days ? `<span class="dr-won-days">${n(Math.min(prizes.length, e.days))} of ${n(e.days)} days</span>` : ''}</div>
     <div class="dr-won-row">${tiles.join('')}${empty}</div></div>`;
 }
 
