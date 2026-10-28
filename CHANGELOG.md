@@ -2,7 +2,10 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.32 (current)
+## 0.1.33 (current)
+- Event crates: a day that gave only watch time shows on the strip, and the menu bar's strip has a slot for each of 8 days
+
+## 0.1.32
 - Tray: a drop with many rewards fits, the claimed and later ones folded into tiles of their own
 
 ## 0.1.31
