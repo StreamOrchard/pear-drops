@@ -761,7 +761,30 @@ test('an event crate’s watch-time prize: shown as level progress, not a pictur
   assert.equal(events[0].text, 'Trick or Treat: +30 min watch time to Level 66');
   const won = reward.snapshot().extras[0].won;
   assert.deepEqual([won.winner.xp, won.xpMinutes, won.levelTo], [30, 30, 66]);
-  assert.deepEqual(reward.snapshot().extras[0].prizes, [], 'nothing for the strip');
+  assert.deepEqual(
+    reward.snapshot().extras[0].prizes.map((p) => [p.id, p.xp, p.at]),
+    [['wt', 30, NOW]],
+    'a day on the strip, all the same',
+  );
+});
+
+test('an event crate’s watch time claimed on kick.com: kept for the strip once, at the next check', async () => {
+  const xp = { id: 'wt', rarity: 'common', card_url: '', thumbnail_url: '', watch_time: { watch_time_minutes: 1 } };
+  const yesterday = { id: 'wt', rarity: 'common', image: null, at: NOW - 86_400_000, xp: 1 };
+  const kick = fakeKick({ challenges: [challenge({ status: 'claimed' }), eventCrate({ status: 'claimed', progress: 180, winner: xp })], rewards: () => [] });
+  const { reward, stored } = setup({ kick, saved: { won: { 'Trick or Treat': [yesterday] } } });
+  reward.start();
+  await settle();
+  await reward.refresh();
+  assert.deepEqual(
+    reward.snapshot().extras[0].prizes.map((p) => [p.xp, p.at]),
+    [
+      [1, NOW],
+      [1, NOW - 86_400_000],
+    ],
+    'today’s, once, with yesterday’s (the same prize, a day apart)',
+  );
+  assert.equal(stored.value.won['Trick or Treat'].length, 2, 'saved');
 });
 
 test('needsWatching: while the daily crate or an event’s fills by watch time, not once they’re ready, nor stopped', async () => {

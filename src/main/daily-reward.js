@@ -282,8 +282,10 @@ const SAME_CLAIM_MS = 6 * 60 * MIN;
 /** An event's prizes with more added: one each (by prize and time), newest first. */
 function mergePrizes(kept = [], more = []) {
   // The same prize twice within hours is one claim, seen twice (as claimed here, then in Kick's list).
+  // Watch time isn't in Kick's list, so it's only ever seen once: each is its own day's.
+  const same = (q, p) => q.id === p.id && (p.xp ? q.at === p.at : !q.at || !p.at || Math.abs(q.at - p.at) < SAME_CLAIM_MS);
   const all = [];
-  for (const p of [...more, ...kept]) if (!all.some((q) => q.id === p.id && (!q.at || !p.at || Math.abs(q.at - p.at) < SAME_CLAIM_MS))) all.push(p);
+  for (const p of [...more, ...kept]) if (!all.some((q) => same(q, p))) all.push(p);
   return all
     .map(({ id, name, type, rarity, image, at, xp }) => ({ id, name: name || null, type: type ?? null, rarity, image: image ?? null, at: at ?? null, ...(xp ? { xp } : {}) }))
     .sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
@@ -382,6 +384,7 @@ class DailyReward extends EventEmitter {
       this.error = true;
     }
     if (!this.running) return;
+    this.keepWatchTime();
     const now = this.daily?.state ?? null;
     if (now === 'ready' && was === 'earning') this.emit('ready', this.snapshot());
     for (const e of this.extras) if (e.state === 'ready' && wasExtras.get(e.id) === 'earning') this.emit('crate-ready', { id: e.id, name: e.name, endsAt: e.recurrence === 'daily' ? e.endsAt : null });
@@ -489,8 +492,9 @@ class DailyReward extends EventEmitter {
         await Promise.race([this.refreshPrizes(), new Promise((r) => (wait = setTimeout(r, NAME_WAIT_MS)))]).catch(() => {});
         clearTimeout(wait);
         reel.winner = this.named(reel.winner);
-        if (crate.name) this.remember(crate.name, { ...reel.winner, at: this.now() });
       }
+      // Watch time too: a day the crate gave little is still one of its days.
+      if (crate?.name && reel.winner) this.remember(crate.name, { ...reel.winner, at: this.now() });
       if (isDaily) {
         this.saved = { ...this.saved, day: dayOf(this.daily.startsAt ?? this.now()), reel, by };
         this.daily = { ...this.daily, state: 'claimed', minutes: this.daily.threshold };
@@ -537,6 +541,20 @@ class DailyReward extends EventEmitter {
     const e = this.extras.find((x) => x.id === id);
     const s = this.saved?.events?.[id];
     return e && s?.reel && s.day === dayOf(e.startsAt ?? this.now()) ? { ...s.reel, winner: this.named(s.reel.winner) } : null;
+  }
+
+  /**
+   * An event's watch time claimed on kick.com (or before Pear Drops kept it): kept now, as Kick's
+   * rewards list leaves watch time out.
+   */
+  keepWatchTime() {
+    for (const e of this.extras.filter((x) => x.state === 'claimed' && x.name && x.recurrence === 'daily')) {
+      const w = this.lastClaim(e.id)?.winner ?? e.winner;
+      const since = e.startsAt ?? this.now() - 86_400_000;
+      if (!w?.xp || (this.saved.won?.[e.name] ?? []).some((p) => p.xp && p.at >= since)) continue;
+      this.remember(e.name, { ...w, at: this.now() });
+      this.slot?.save?.(this.saved);
+    }
   }
 
   /** Keeps a prize an event gave, with the rest of that event's. */
