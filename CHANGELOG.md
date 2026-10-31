@@ -2,7 +2,11 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.33 (current)
+## 0.1.34 (current)
+- Connected apps no longer leave a folder behind in /tmp each time Pear Drops stops (Grapevine 0.11.2)
+- Event crates: the last day says it's the last one, and an ended event's crate goes away
+
+## 0.1.33
 - Event crates: a day that gave only watch time shows on the strip, and the menu bar's strip has a slot for each of 8 days
 
 ## 0.1.32
