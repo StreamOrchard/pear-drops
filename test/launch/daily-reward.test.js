@@ -330,6 +330,19 @@ test('claiming an event’s crate: its prize, named from Kick’s rewards list, 
   await a.win.keyboard.press('Escape');
 });
 
+test('an event’s last day: no next one, the event ends at the reset; once it has, its tab goes', async () => {
+  await a.app.evaluate(() => global.pdDemo.daily({ eventDays: 1 }));
+  await a.win.click(chest);
+  await a.win.click(tab('event-demo'));
+  await until(a.win, () => /Last one · event ends in \d/.test(document.querySelector('.dr-pop .dr-subline')?.textContent), 'the last one');
+  assert.doesNotMatch(await a.win.textContent('.dr-pop .dr-subline'), /Next one/);
+  // Kick still lists it after the event: Pear Drops leaves it out.
+  await a.app.evaluate(() => global.pdDemo.daily({ eventDays: 0 }));
+  await until(a.win, () => !document.querySelector('.dr-pop .dr-tab[data-id="event-demo"]') && document.querySelector('.dr-pop .dr-card:not(.crate)'), 'only the daily one');
+  await a.win.keyboard.press('Escape');
+  await a.app.evaluate(() => global.pdDemo.daily({ eventDays: 8 }));
+});
+
 test('both ready: the card opens on the daily one first', async () => {
   await a.app.evaluate(() => global.pdDemo.daily({ minutes: 60, event: 180, eventName: 'Trick or Treat' }));
   await a.win.click(chest);

@@ -269,8 +269,15 @@ function cardHead(crates, active, { where, title, sub, theme }) {
     <div class="dr-subline theme-${esc(theme)}"><b>${esc(title)}</b>${sub ? `<span class="dr-head-sub">${sub}</span>` : ''}</div>`;
 }
 
-/** What to know about a crate's time: when it resets, the deadline, or the next one. */
-const crateSub = (state, endsAt) => (!endsAt ? '' : { earning: `Resets at ${fmtClock(endsAt)}`, ready: `Claim before ${fmtClock(endsAt)}`, claimed: `Next one in ${fmtDur(endsAt - Date.now())}` }[state] ?? '');
+/**
+ * What to know about a crate's time: when it resets, the deadline, or the next one. On an event's
+ * last day (`until`, its end, comes at the reset) there's no next one: the event ends then.
+ */
+function crateSub(state, endsAt, until = null) {
+  if (!endsAt) return '';
+  const next = until && endsAt >= until ? `Last one · event ends in ${fmtDur(until - Date.now())}` : `Next one in ${fmtDur(endsAt - Date.now())}`;
+  return { earning: `Resets at ${fmtClock(endsAt)}`, ready: `Claim before ${fmtClock(endsAt)}`, claimed: next }[state] ?? '';
+}
 
 /**
  * The daily reward card: a tab per crate Kick offers (the daily one, an event's, the Welcome
@@ -378,7 +385,7 @@ function crateOdds(e) {
 function crateCard(dr, e, crates, { where, revealing }) {
   const theme = esc(e.theme ?? 'event');
   const daily = e.until && e.endsAt && e.until > e.endsAt;
-  const top = cardHead(crates, e.id, { where, title: e.name || 'Event reward', sub: crateSub(e.state, e.endsAt), theme });
+  const top = cardHead(crates, e.id, { where, title: e.name || 'Event reward', sub: crateSub(e.state, e.endsAt, e.until), theme });
   const art = e.media?.idle ? `<video class="dr-crate" src="${esc(e.media.idle)}" autoplay loop muted playsinline data-fallback="crate"></video>` : crateArt('idle');
   let stage;
   if (e.state === 'claimed') {
