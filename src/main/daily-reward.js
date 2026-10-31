@@ -103,15 +103,16 @@ function readChallenge(c) {
  * with videos and odds of its own) or the Welcome Reward. Only the others Pear Drops can do
  * something about: one that's ready to claim, one that fills by watching, or an event's that was
  * claimed today (it stays, showing what it gave). The Welcome Reward waits on Kick's own sign-up
- * steps, a pop-up kick.com shows when it chooses, with no link to it.
+ * steps, a pop-up kick.com shows when it chooses, with no link to it. An event's crate goes when its
+ * event ends, even if Kick still lists it.
  */
-function readChallenges(body, oneOff = null) {
+function readChallenges(body, oneOff = null, now = Date.now()) {
   const all = [...listOf(body), ...listOf(oneOff)].map(readChallenge).filter(Boolean);
   const unique = [...new Map(all.map((c) => [c.id, c])).values()];
   const watched = unique.filter((c) => c.recurrence === 'daily' && c.condition === 'watch_time_minutes');
   const daily = watched.find((c) => !c.featured) ?? watched[0] ?? null;
   const extras = unique.filter(
-    (c) => c !== daily && (c.state === 'ready' || (c.state === 'earning' && c.condition === 'watch_time_minutes') || (c.state === 'claimed' && c.recurrence === 'daily')),
+    (c) => c !== daily && !(c.until && c.until <= now) && (c.state === 'ready' || (c.state === 'earning' && c.condition === 'watch_time_minutes') || (c.state === 'claimed' && c.recurrence === 'daily')),
   );
   return { daily, extras };
 }
@@ -373,7 +374,7 @@ class DailyReward extends EventEmitter {
     try {
       const wantCards = full || !this.collection || this.now() - this.cardsAt > CARDS_MS || (this.daily?.endsAt && this.now() >= this.daily.endsAt);
       const [challenges, oneOff] = await Promise.all([this.kick.dailyChallenges(), wantCards ? this.kick.dailyChallenges({ recurrence: 'one_off' }).catch(() => null) : null]);
-      const read = readChallenges(challenges, oneOff);
+      const read = readChallenges(challenges, oneOff, this.now());
       this.daily = read.daily;
       // Kick's plain list leaves out the one-off ones (the Welcome Reward): kept from the last time they were asked for.
       this.extras = oneOff ? read.extras : [...read.extras, ...this.extras.filter((e) => e.recurrence === 'one_off' && !read.extras.some((x) => x.id === e.id))];

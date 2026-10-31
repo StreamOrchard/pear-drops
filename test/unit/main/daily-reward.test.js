@@ -521,7 +521,7 @@ const PRIZE = { id: 'p1', rarity: 'uncommon', card_url: '', thumbnail_url: 'http
 const prizeClaim = () => ({ data: { reveal_type: 'instant', roulette: [], winner: PRIZE, consolation: null } });
 
 test('an event’s crate is another daily challenge: the plain one is still the daily, whichever comes first', () => {
-  const read = dr.readChallenges({ data: [eventCrate(), challenge()] });
+  const read = dr.readChallenges({ data: [eventCrate(), challenge()] }, null, NOW);
   assert.equal(read.daily.id, 'ch-1');
   assert.deepEqual(read.extras.map((e) => [e.id, e.name, e.state, e.threshold]), [['ev-1', 'Trick or Treat', 'earning', 180]]);
   const e = read.extras[0];
@@ -531,9 +531,20 @@ test('an event’s crate is another daily challenge: the plain one is still the 
   assert.equal(e.theme, 'halloween');
   assert.deepEqual(e.odds.map((o) => o.rarity), ['common', 'uncommon', 'rare', 'mythic']);
   // Claimed today, it stays listed, showing what it gave; a claimed one-off doesn't.
-  const claimed = dr.readChallenges({ data: [challenge(), eventCrate({ status: 'claimed', winner: PRIZE })] });
+  const claimed = dr.readChallenges({ data: [challenge(), eventCrate({ status: 'claimed', winner: PRIZE })] }, null, NOW);
   assert.deepEqual(claimed.extras.map((x) => [x.state, x.winner.image, x.winner.square]), [['claimed', PRIZE.thumbnail_url, true]]);
   assert.equal(dr.readChallenge(challenge({ animations: null })).ownMedia, false, 'Kick’s default videos are the daily crate’s');
+});
+
+test('an event’s crate goes when its event ends, even if Kick still lists it', () => {
+  const end = Date.parse('2026-10-28T00:00:00Z');
+  for (const status of ['in_progress', 'claimable', 'claimed']) {
+    const crates = [challenge(), eventCrate({ status, winner: PRIZE })];
+    assert.equal(dr.readChallenges({ data: crates }, null, end - 1).extras.length, 1, `${status}: on its last day`);
+    assert.deepEqual(dr.readChallenges({ data: crates }, null, end).extras, [], `${status}: once it's over`);
+  }
+  // A crate with no event period (the Welcome Reward) has no end.
+  assert.equal(dr.readChallenges({ data: [challenge()] }, { data: [challenge({ id: 'w', recurrence: 'one_off', type: 'onboarding_completed', status: 'claimable' })] }, end).extras.length, 1);
 });
 
 test('an event’s theme comes from its name or its videos’ folder, or is a plain event', () => {
