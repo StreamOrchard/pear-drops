@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { Farmer, rewardKind } = require('../../../src/main/farmer');
+const { Farmer, rewardKind, kickTime } = require('../../../src/main/farmer');
 const { History } = require('../../../src/main/history');
 const { Db, openDb } = require('../../../src/main/db');
 const { DropArchive } = require('../../../src/main/archive');
@@ -503,6 +503,70 @@ test('a sign from the page (the video ended, Kick said it stopped) checks with K
   assert.equal(farmer.snapshot().notice.slug, 'first');
   farmer.notice.at -= 61_000;
   assert.equal(farmer.snapshot().notice, null, 'the notice shows for a minute');
+});
+
+test('a channel whose stream ended stays skipped while the list still has that stream, and is picked at once when it’s back with a new one', async () => {
+  const started = new Date(Date.now() - 60 * MIN).toISOString();
+  const stream = { ...live('eddie', 22), start_time: started };
+  const { farmer, watcher, history } = setup({ campaigns: [campaign('a')], streams: { 1: [stream] } });
+  await farmer.tick();
+  assert.equal(watcher.watching, 'eddie');
+  watcher.emit('left', { from: 'eddie' });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(watcher.watching, null, 'the list still has the stream that ended: skipped');
+  await farmer.tick();
+  assert.equal(watcher.watching, null, 'still skipped on the next refresh');
+  assert.equal(failed(farmer.explain()).text, '1 live, but each is skipped for a while');
+
+  stream.start_time = new Date(Date.now() - 2 * MIN).toISOString(); // Eddie went live again
+  await farmer.tick();
+  assert.equal(watcher.watching, 'eddie', 'a new stream is picked without waiting out the skip');
+  const pick = history.all().filter((e) => e.type === 'decision' && e.slug === 'eddie').at(-1);
+  assert.match(pick.text, /back with a new stream since the last one ended/);
+});
+
+test('a stream Kick says went offline is skipped only until the channel starts a new stream', async () => {
+  const stream = { ...live('eddie', 22), start_time: new Date(Date.now() - 60 * MIN).toISOString() };
+  const { farmer, watcher, api } = setup({ campaigns: [campaign('a')], streams: { 1: [stream] } });
+  await farmer.tick();
+  api.offline.add('eddie');
+  await farmer.tick();
+  assert.equal(watcher.watching, null, 'left: Stream went offline');
+  api.offline.delete('eddie'); // the list has it again, the same stream
+  await farmer.tick();
+  assert.equal(watcher.watching, null, 'the same stream stays skipped');
+  stream.start_time = new Date().toISOString();
+  await farmer.tick();
+  assert.equal(watcher.watching, 'eddie');
+});
+
+test('a skip is kept when the stream that ended has no start time, or the channel was skipped for another reason', async () => {
+  const stream = live('eddie', 22);
+  delete stream.start_time;
+  const { farmer, watcher } = setup({ campaigns: [campaign('a')], streams: { 1: [stream] } });
+  await farmer.tick();
+  watcher.emit('left', { from: 'eddie' });
+  await new Promise((r) => setImmediate(r));
+  stream.start_time = new Date().toISOString();
+  await farmer.tick();
+  assert.equal(watcher.watching, null, 'no start time to tell the streams apart: the plain 10 min skip');
+
+  farmer.blacklist.clear();
+  await farmer.tick();
+  assert.equal(watcher.watching, 'eddie');
+  await farmer.skip();
+  stream.start_time = new Date(Date.now() + 5 * MIN).toISOString();
+  await farmer.tick();
+  assert.equal(watcher.watching, null, 'skipped by you: a new stream doesn’t lift it');
+});
+
+test('kickTime reads Kick’s times, those without a zone as UTC', () => {
+  assert.equal(kickTime('2026-11-07 12:30:21'), Date.UTC(2026, 10, 7, 12, 30, 21));
+  assert.equal(kickTime('2026-11-07T12:30:21Z'), Date.UTC(2026, 10, 7, 12, 30, 21));
+  assert.equal(kickTime('2026-11-07T13:30:21+01:00'), Date.UTC(2026, 10, 7, 12, 30, 21));
+  assert.equal(kickTime(null), null);
+  assert.equal(kickTime(''), null);
+  assert.equal(kickTime('soon'), null);
 });
 
 test('quick checks are spaced out, and a check that finds the stream fine changes nothing', async () => {
