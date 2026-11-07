@@ -36,6 +36,7 @@ const CONFLICT_REPEAT_MS = 10 * MIN;
 // DIRECT_MAX: the category's streams are searched deeper instead.
 const DIRECT_MAX = 8;
 const DIRECT_GAP_MS = 1200;
+const NEW_STREAM_MS = MIN; // started this much later than the stream that ended: a new stream
 
 /**
  * Which queue row a drop belongs to: its category's (any channel counts), its event's (Kick's
@@ -60,6 +61,14 @@ const httpsLink = (url) => (typeof url === 'string' && /^https:\/\/[^\s"'<>]+$/.
 
 // Words in an organiser's name or a web address that say nothing about whose drop it is.
 const PLAIN_WORDS = new Set(['www', 'com', 'net', 'org', 'gg', 'tv', 'io', 'kick', 'drops', 'https', 'http', 'ltd', 'llc', 'inc', 'gmbh', 'the', 'official']);
+
+/** A time from Kick, in ms. Its channel check says "2026-11-07 12:30:21": UTC, with no zone. */
+function kickTime(t) {
+  if (t == null || t === '') return null;
+  const s = String(t);
+  const ms = Date.parse(/[zZ]$|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`);
+  return Number.isFinite(ms) ? ms : null;
+}
 
 /**
  * A drop's own channel, if it has one. Kick doesn't say which is the host (it lists the channels
@@ -183,6 +192,7 @@ class Farmer extends EventEmitter {
     this.followedLive = null; // { at, live: Set } from the follow list: who's live among the channels you follow
     this.blacklist = new Map(); // slug -> until
     this.skipWhy = new Map(); // slug -> why it's skipped (block())
+    this.ended = new Map(); // slug -> when its stream that ended had started (blockEnded): a later one isn't skipped
     this.availability = new Availability(); // how often each queue row has a stream live
     this.claimBackoff = new Map(); // rewardId -> until
     this.claimErrors = new Map(); // rewardId -> { type, text, connectUrl, at }: why Kick last refused it
@@ -1023,7 +1033,7 @@ class Farmer extends EventEmitter {
         categoryId: cat.categoryId ?? cat.id,
         followed: this.followed.has(slug.toLowerCase()),
         covers,
-        blocked: (this.blacklist.get(slug) ?? 0) > now,
+        blocked: this.isSkipped(slug, ls.start_time, now),
       });
     }
     return out.sort(
@@ -1297,7 +1307,8 @@ class Farmer extends EventEmitter {
       }
       if (reason.kind !== 'offline') this.setNotice('switch', `Left ${cur.username}: ${reason.text.toLowerCase()}`, cur);
       this.addLog('switch', `${reason.text}, leaving ${cur.username}`);
-      if (reason.block) this.block(cur.slug, now + reason.block, reason.text);
+      if (reason.ended) this.blockEnded(cur, now + reason.block, reason.text);
+      else if (reason.block) this.block(cur.slug, now + reason.block, reason.text);
       this.stopWatching(reason.text);
       this.buildModel();
     }
@@ -1334,7 +1345,7 @@ class Farmer extends EventEmitter {
     if (info) {
       const live = info.livestream?.is_live;
       // Skipped a while, as after a raid: the stream list can still have it for a few minutes.
-      if (!live) return { kind: 'offline', text: 'Stream went offline', block: 10 * MIN };
+      if (!live) return { kind: 'offline', text: 'Stream went offline', block: 10 * MIN, ended: true };
       const categories = info.livestream.categories?.map((c) => c.id) ?? [];
       cur.title = info.livestream.session_title ?? cur.title;
       cur.viewers = info.livestream.viewer_count ?? cur.viewers;
@@ -1486,7 +1497,7 @@ class Farmer extends EventEmitter {
     const now = Date.now();
     const lang = String(this.language() ?? '').toLowerCase().split(/[-_]/)[0];
     this.rewardPicks = list
-      .filter((ls) => ls?.channel?.slug && (this.blacklist.get(ls.channel.slug) ?? 0) <= now)
+      .filter((ls) => ls?.channel?.slug && !this.isSkipped(ls.channel.slug, ls.start_time, now))
       .map((ls) => ({
         slug: ls.channel.slug,
         channelId: ls.channel.id,
@@ -1611,6 +1622,8 @@ class Farmer extends EventEmitter {
     else if (smart) reasons.push(`it ends soonest (${fmtSpan(cat.soonestEnd - now)} left)`);
     else reasons.push(`top of your queue`);
     if (stream.followed) reasons.push('a channel you follow');
+    // Still on the skip list, yet usable: its stream ended and it's back with a new one.
+    if ((this.blacklist.get(stream.slug) ?? 0) > now) reasons.push('back with a new stream since the last one ended');
     if (campaignIds.length > 1) reasons.push(`counts for ${campaignIds.length} drops at once`);
     reasons.push(`${stream.viewers} viewers`);
     return reasons;
@@ -1631,6 +1644,25 @@ class Farmer extends EventEmitter {
   block(slug, until, why) {
     this.blacklist.set(slug, until);
     this.skipWhy.set(slug, why);
+    this.ended.delete(slug);
+  }
+
+  /**
+   * Skips a channel whose stream ended (or raided), as the stream list can still have that stream
+   * for a few minutes. Only that stream: one that started later is a new stream, and isn't skipped.
+   */
+  blockEnded(cur, until, why) {
+    this.block(cur.slug, until, why);
+    const started = kickTime(cur.startedAt);
+    if (started != null) this.ended.set(cur.slug, started);
+  }
+
+  /** Whether a channel's stream (by when it started) is skipped now. */
+  isSkipped(slug, startTime, now = Date.now()) {
+    if ((this.blacklist.get(slug) ?? 0) <= now) return false;
+    const ended = this.ended.get(slug);
+    const started = kickTime(startTime);
+    return ended == null || started == null || started - ended <= NEW_STREAM_MS;
   }
 
   async verifyEligible(stream, cat) {
@@ -1758,7 +1790,7 @@ class Farmer extends EventEmitter {
     this.addLog('switch', `${text}, switching stream`);
     this.record('offline', { ...this.streamCtx(cur), text });
     this.setNotice(to ? 'raid' : 'ended', to ? `${cur.username} raided ${to}` : `${cur.username} ended the stream`, cur);
-    this.block(cur.slug, Date.now() + 10 * MIN, 'The stream ended');
+    this.blockEnded(cur, Date.now() + 10 * MIN, 'The stream ended');
     this.stopWatching('Stream ended');
     this.buildModel();
     this.pickStream().finally(() => this.changed());
@@ -1903,7 +1935,7 @@ class Farmer extends EventEmitter {
     else if (!row.streamsLoaded && !row.streams.length) add('stream', null, `${row.category.name}’s live streams haven’t been checked yet`);
     else {
       // From the skip list itself: a stream skipped since the queue was last built counts as skipped.
-      const isBlocked = (s) => (this.blacklist.get(s.slug) ?? 0) > now;
+      const isBlocked = (s) => this.isSkipped(s.slug, s.startedAt, now);
       const usable = row.streams.filter((s) => !isBlocked(s));
       const blocked = row.streams.filter(isBlocked);
       liveCount = usable.length;
@@ -2130,4 +2162,4 @@ class Farmer extends EventEmitter {
   }
 }
 
-module.exports = { Farmer, rewardKind, logFromHistory, claimFailure, hostChannel, orderChannels };
+module.exports = { Farmer, rewardKind, logFromHistory, claimFailure, hostChannel, orderChannels, kickTime };
