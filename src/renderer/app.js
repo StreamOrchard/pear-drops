@@ -139,12 +139,15 @@ function renderTitlebar() {
   );
   const s = statusInfo();
   const dot = s.cls === 'farming' ? '<span class="live-dot green"></span>' : '<span class="status-dot"></span>';
-  // With Developer tools on, it opens Why isn't this farming?
+  // With Developer tools on, it opens Why isn't this farming? Nothing left to farm: none, as the
+  // hero and the Coming soon card already say so.
   setHTML(
     $('#status-pill'),
-    state.settings?.developerTools === true
-      ? `<button class="status-pill ${s.cls}" data-action="dev-why" data-tip="Why isn’t this farming?">${dot}<span class="label">${esc(s.text)}</span></button>`
-      : `<div class="status-pill ${s.cls}">${dot}<span class="label">${esc(s.text)}</span></div>`,
+    s.cls === 'done'
+      ? ''
+      : state.settings?.developerTools === true
+        ? `<button class="status-pill ${s.cls}" data-action="dev-why" data-tip="Why isn’t this farming?">${dot}<span class="label">${esc(s.text)}</span></button>`
+        : `<div class="status-pill ${s.cls}">${dot}<span class="label">${esc(s.text)}</span></div>`,
   );
 
   const user = state.auth.user;

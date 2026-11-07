@@ -1892,13 +1892,18 @@ class Farmer extends EventEmitter {
     const watched = cur && campaigns.find((c) => cur.campaignIds.includes(c.id));
     const firstOn = this.targetCategories()[0];
     const firstOff = categories.find((r) => r.needsWatching);
-    const c = campaigns.find((k) => k.id === campaignId) ?? watched ?? (firstOn && open(firstOn)) ?? (firstOff && open(firstOff)) ?? campaigns.find((k) => !k.complete) ?? campaigns[0] ?? null;
+    // Not a finished drop when none is left: then every drop is claimed, and nothing is wrong.
+    const c = campaigns.find((k) => k.id === campaignId) ?? watched ?? (firstOn && open(firstOn)) ?? (firstOff && open(firstOff)) ?? campaigns.find((k) => !k.complete) ?? null;
+    const caughtUp = !c && campaigns.length > 0;
+    const soon = (this.model.upcoming ?? [])[0];
+    const next = soon ? `Next: ${soon.name} starts in ${fmtSpan(new Date(soon.startsAt).getTime() - now)}` : 'New drops are picked up automatically';
     const row = rowOf(c);
     const gameOnly = settings.includeGameDrops
       ? 0
       : this.rawCampaigns.filter((k) => k.category?.id && k.status !== 'expired' && new Date(k.starts_at) <= now && new Date(k.ends_at) > now && !campaigns.some((x) => x.id === k.id)).length;
     const gameNote = gameOnly ? `${gameOnly} game drop${gameOnly > 1 ? 's' : ''} left out (Settings › Farming › Include game drops & giveaways)` : '';
-    if (!c) add('drop', false, 'No active drop with emotes or badges', gameNote);
+    if (caughtUp) add('drop', true, 'Every emote and badge drop is claimed');
+    else if (!c) add('drop', false, 'No active drop with emotes or badges', gameNote);
     else if (row && !row.enabled) add('drop', false, `${row.name} is switched off in your queue`, 'Its switch in the Queue tab');
     else {
       const games = c.rewards.filter((r) => !r.tracked).length;
@@ -1982,9 +1987,10 @@ class Farmer extends EventEmitter {
       at: now,
       drops: drops.map((k) => ({ id: k.id, name: k.name })),
       drop: c && { id: c.id, name: c.name, category: row?.category.name ?? null },
+      ...(caughtUp ? { next } : {}),
       stream: cur ? { slug: cur.slug, username: cur.username } : null,
       checks,
-      verdict: { farming, text: failed?.text ?? (farming ? `It’s farming ${c.name} on ${cur.username}` : (waiting?.text ?? 'Nothing failed')) },
+      verdict: caughtUp && !failed ? { farming, done: true, text: 'Nothing left to farm' } : { farming, text: failed?.text ?? (farming ? `It’s farming ${c.name} on ${cur.username}` : (waiting?.text ?? 'Nothing failed')) },
     };
   }
 

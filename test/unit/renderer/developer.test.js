@@ -192,6 +192,12 @@ test('Why isn’t this farming?: the checks with their marks and notes, the verd
   run('dev.why = w', { w: { ...why, drops: [why.drops[0]], verdict: { farming: true, text: 'It’s farming' } } });
   assert.match(run('whyModal()'), /why-verdict ok"><b>Farming:/);
   assert.doesNotMatch(run('whyModal()'), /dev-why-step/);
+  // Every drop claimed: all caught up, in green, with the next drop where the drop would be.
+  const caughtUp = { at: T, drops: [], drop: null, next: 'Next: Kart Cup starts in 3h 54m', stream: null, checks: [{ step: 'drop', ok: true, text: 'Every emote and badge drop is claimed' }], verdict: { farming: false, done: true, text: 'Nothing left to farm' } };
+  run('dev.why = w', { w: caughtUp });
+  assert.match(run('whyModal()'), /No drop to farm<\/b><span>Next: Kart Cup starts in 3h 54m/);
+  assert.match(run('whyModal()'), /why-verdict ok"><b>All caught up:<\/b> Nothing left to farm/);
+  assert.equal(run('whyText(dev.why)').split('\n').slice(1).join('\n'), ['No drop to farm · Next: Kart Cup starts in 3h 54m', '✓ Every emote and badge drop is claimed', 'All caught up: Nothing left to farm'].join('\n'));
   run('dev.why = null');
   assert.match(run('whyModal()'), /spinner[\s\S]*data-action="dev-why-copy" disabled/);
 
