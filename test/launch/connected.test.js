@@ -4,9 +4,25 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { launchApp, until } = require('./app');
+const { launchApp, until: untilPlain } = require('./app');
 
 const MV = 'com.glowingpear.streammultiview';
+// A wait that fails says what the card showed and how the link to Stream Multiview stood.
+async function until(page, ...args) {
+  try {
+    return await untilPlain(page, ...args);
+  } catch (err) {
+    const foot = await a.win.evaluate(() => document.querySelector('.app-foot')?.textContent.trim() ?? '(no card)').catch(() => '?');
+    const link = await a.app
+      .evaluate((_e, id) => {
+        const l = global.pdDebug.connected.link;
+        return JSON.stringify({ running: l.running, connected: l.conns.has(id), opening: l.opening.size, why: l.why.get(id) ?? null });
+      }, MV)
+      .catch(() => '?');
+    err.message += `\n  The card: ${foot}\n  The link: ${link}`;
+    throw err;
+  }
+}
 let a;
 test.before(async () => {
   a = await launchApp({ size: { width: 1480, height: 940 } });

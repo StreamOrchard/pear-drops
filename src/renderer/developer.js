@@ -376,9 +376,10 @@ const developerActions = {
   },
 };
 
-// Something new: the open list follows it (on its newest page; older pages stay put).
+// Something new: the open list follows it (on its newest page; older pages stay put). Only once
+// it's been shown: this can come before app.js (and its ui) has loaded.
 window.pd.developer.onChanged(() => {
-  if (ui.modal === 'settings' && ui.settingsTab === 'developer' && state) loadDeveloper();
+  if (dev.data && ui.modal === 'settings' && ui.settingsTab === 'developer' && state) loadDeveloper();
 });
 // The ⋯ menu closes on a click anywhere else, or Escape.
 document.addEventListener('click', (event) => {

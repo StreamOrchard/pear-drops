@@ -220,3 +220,31 @@ test('Why isn’t this farming?: the checks with their marks and notes, the verd
   assert.equal(run('dev.why'), null);
   run('ui.modal = null');
 });
+
+test('something new before app.js has loaded is no error; once the list has been shown, it follows', async () => {
+  let changed = null;
+  const asked = [];
+  const page = vm.createContext({
+    document: ctx.document,
+    window: { addEventListener: noop, pd: { developer: { onChanged: (fn) => (changed = fn), page: async (list) => (asked.push(list), { entries: [] }) } } },
+    navigator: ctx.navigator,
+    Date,
+    Math,
+    Number,
+    String,
+    Array,
+    JSON,
+    Intl,
+    Object,
+    Map,
+  });
+  for (const file of ['icons.js', 'charts.js', 'format.js', 'developer.js']) vm.runInContext(fs.readFileSync(path.join(DIR, file), 'utf8'), page, { filename: file });
+  assert.doesNotThrow(() => changed(), 'no ui yet');
+  Object.assign(page, { ui: { modal: 'settings', settingsTab: 'developer' }, state: {}, render: noop, $: () => null });
+  changed();
+  assert.deepEqual(asked, [], 'not shown yet');
+  vm.runInContext('dev.data = { entries: [] }', page);
+  changed();
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(asked, ['errors']);
+});
