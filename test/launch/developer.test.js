@@ -269,3 +269,32 @@ test('the errors are kept for the next run, marked as the last run’s; Clear em
     throw err;
   }
 });
+
+test('every drop claimed: no status in the title bar, Why isn’t this farming? is all caught up, and the popover names the next drop', async () => {
+  await a.win.evaluate(() => window.pd.setSettings({ developerTools: true, developerToolsWarned: true, rewardWatch: false }));
+  await a.demo((d) => {
+    for (const c of d.api.rawCampaigns.filter((c) => c.status !== 'upcoming')) {
+      d.api.units[c.id] = Math.max(...c.rewards.map((r) => r.required_units));
+      c.rewards.forEach((r) => d.api.claimed.add(r.id));
+    }
+    return d.farmer.tick({ force: true });
+  });
+  await until(a.win, () => farm()?.status.code === 'done', 'nothing left to farm', 30000);
+  await until(a.win, () => !document.querySelector('#status-pill .status-pill'), 'no status pill');
+  await a.win.evaluate(() => runAction('dev-why'));
+  await until(a.win, () => /All caught up: Nothing left to farm/.test(document.querySelector('.modal.why .why-verdict.ok')?.textContent), 'all caught up');
+  assert.match(await a.win.textContent('.why-about'), /No drop to farm\s*Next: .+ starts in /);
+  assert.equal(await a.win.locator('.why-row.why-x').count(), 0, 'nothing failed');
+  await a.win.keyboard.press('Escape');
+
+  await a.demo((d) => d.openTray());
+  let pop;
+  for (let i = 0; i < 40 && !pop; i++) {
+    pop = a.app.windows().find((x) => x.url().endsWith('tray.html'));
+    if (!pop) await a.win.waitForTimeout(150);
+  }
+  await until(pop, () => document.querySelector('.tray-empty .tray-next'), 'the next drop in the popover');
+  assert.match(await pop.textContent('.tray-empty'), /Every emote and badge drop is claimed\s*Next: .+ · in /);
+  assert.match(await pop.textContent('.tray-head .status-pill'), /All done/);
+  assert.deepEqual(a.errors, []);
+});

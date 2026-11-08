@@ -311,6 +311,12 @@ body.tray-body {
   border: 1px solid var(--border);
   color: var(--text-2);
 }
+.tray-empty .tray-next {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
 .tray-empty .icon {
   width: 22px;
   height: 22px;

@@ -224,14 +224,17 @@ async function loadWhy() {
   render();
 }
 
+/** The verdict's first words: farming, all caught up (every drop claimed), or not farming. */
+const whyVerdict = (w) => (w.verdict.farming ? 'Farming' : w.verdict.done ? 'All caught up' : 'Not farming');
+
 /** The checks as text, for Copy. */
 function whyText(w) {
   const mark = (ok) => (ok === true ? '✓' : ok === false ? '✗' : '–');
   return [
     `Why isn't this farming? · ${new Date(w.at).toLocaleString()}`,
-    w.drop ? `${w.drop.name}${w.drop.category ? ` · ${w.drop.category}` : ''}` : 'No drop',
+    w.drop ? `${w.drop.name}${w.drop.category ? ` · ${w.drop.category}` : ''}` : w.next ? `No drop to farm · ${w.next}` : 'No drop',
     ...w.checks.map((k) => `${mark(k.ok)} ${k.text}${k.note ? ` (${k.note})` : ''}`),
-    `${w.verdict.farming ? 'Farming' : 'Not farming'}: ${w.verdict.text}`,
+    `${whyVerdict(w)}: ${w.verdict.text}`,
   ].join('\n');
 }
 
@@ -241,7 +244,7 @@ function whyModal() {
   const at = w?.drop ? w.drops.findIndex((d) => d.id === w.drop.id) : -1;
   const step = (dir, ic, tip, off) => `<button class="btn sm icon-only ghost" data-action="dev-why-step" data-dir="${dir}" data-tip="${tip}" ${off ? 'disabled' : ''}>${icon(ic)}</button>`;
   const about = w
-    ? `<div class="why-about"><div class="why-drop"><b>${esc(w.drop?.name ?? 'No drop to farm')}</b><span>${esc(w.drop?.category ?? 'Nothing in the queue')}${w.stream ? ` · watching ${esc(w.stream.username)}` : ''}</span></div>
+    ? `<div class="why-about"><div class="why-drop"><b>${esc(w.drop?.name ?? 'No drop to farm')}</b><span>${esc(w.drop?.category ?? w.next ?? 'Nothing in the queue')}${w.stream ? ` · watching ${esc(w.stream.username)}` : ''}</span></div>
         ${w.drops.length > 1 ? `<span class="why-count num">${at + 1} of ${w.drops.length}</span>${step(-1, 'chevronLeft', 'The drop before it in the queue', at <= 0)}${step(1, 'chevronRight', 'The next drop in the queue', at === -1 || at >= w.drops.length - 1)}` : ''}</div>`
     : '';
   const checks = w
@@ -251,7 +254,7 @@ function whyModal() {
           return `<div class="why-row why-${tone}"><span class="why-m">${ic ? icon(ic) : '–'}</span><span class="why-t">${esc(k.text)}${k.note ? `<small>${esc(k.note)}</small>` : ''}</span></div>`;
         })
         .join('')}</div>
-      <div class="why-verdict ${w.verdict.farming ? 'ok' : ''}"><b>${w.verdict.farming ? 'Farming' : 'Not farming'}:</b> ${esc(w.verdict.text)}</div>`
+      <div class="why-verdict ${w.verdict.farming || w.verdict.done ? 'ok' : ''}"><b>${whyVerdict(w)}:</b> ${esc(w.verdict.text)}</div>`
     : '<div class="why-checks"><div class="spinner"></div></div>';
   const copied = dev.copied === 'why';
   return `<div class="modal-backdrop" data-action="close-modal">

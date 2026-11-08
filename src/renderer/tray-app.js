@@ -29,6 +29,12 @@ function statusLine(f) {
   return map[f.status.code] ?? ['waiting', 'Waiting'];
 }
 
+/** With nothing left to farm: the next drop Kick has announced, and when it starts. */
+function nextDrop(f) {
+  const c = f.upcoming?.[0];
+  return c ? `<small class="tray-next">Next: ${esc(c.name)} · in ${fmtDur(new Date(c.startsAt).getTime() - Date.now())}</small>` : '';
+}
+
 /** The live dot by the streamer's name, or what's wrong with the stream right now. */
 function healthMark(f) {
   const h = streamHealth(f);
@@ -136,7 +142,7 @@ function render() {
         </div>
         ${trayRewards(p)}
       </div>`
-    : `<div class="tray-empty">${icon(f.paused ? 'pause' : f.status.code === 'done' ? 'trophy' : 'clock')}<div>${esc(f.paused ? 'Paused. Nothing is being watched.' : f.status.message)}</div></div>`;
+    : `<div class="tray-empty">${icon(f.paused ? 'pause' : f.status.code === 'done' ? 'trophy' : 'clock')}<div>${esc(f.paused ? 'Paused. Nothing is being watched.' : f.status.message)}${!f.paused && f.status.code === 'done' ? nextDrop(f) : ''}</div></div>`;
 
   setHTML(
     root,

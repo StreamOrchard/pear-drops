@@ -1399,7 +1399,30 @@ test('explain: a reward waiting to be claimed, by hand or after Kick refused it'
   refused.api.claim = async (c, r) => refused.api.claimed.add(r);
   refused.farmer.claimBackoff.clear();
   await refused.farmer.tick();
-  assert.equal(failed(refused.farmer.explain()).text, 'Every reward in it is claimed');
+  assert.equal(failed(refused.farmer.explain({ campaignId: 'a' })).text, 'Every reward in it is claimed', 'asked about by name, it still explains that drop');
+});
+
+test('explain: every drop claimed is all caught up, not a finished drop that failed, with the next drop Kick has announced', async () => {
+  const later = new Date(Date.now() + (3 * 60 + 54) * MIN + 10_000).toISOString();
+  const soon = { ...campaign('soon', { category: { id: 9, name: 'Pixel Kart' } }), name: 'Kart Cup', status: 'upcoming', starts_at: later, ends_at: later };
+  const { farmer, api } = setup({ campaigns: [campaign('a'), campaign('b'), soon], streams: { 1: [live('s', 1)] }, units: { a: 60, b: 60 } });
+  await farmer.tick();
+  assert.ok(api.claimed.has('a-r1') && api.claimed.has('b-r1'));
+  const w = farmer.explain();
+  assert.equal(w.drop, null, 'no finished drop picked to explain');
+  assert.equal(failed(w), undefined, 'nothing failed');
+  assert.deepEqual(w.checks.find((k) => k.step === 'drop'), { step: 'drop', ok: true, text: 'Every emote and badge drop is claimed' });
+  assert.deepEqual(w.verdict, { farming: false, done: true, text: 'Nothing left to farm' });
+  assert.equal(w.next, 'Next: Kart Cup starts in 3h 54m');
+
+  api.list = api.list.filter((c) => c.id !== 'soon');
+  await farmer.tick({ force: true });
+  assert.equal(farmer.explain().next, 'New drops are picked up automatically', 'none announced');
+
+  farmer.setPaused(true);
+  const paused = farmer.explain();
+  assert.equal(paused.verdict.done, undefined, 'paused says so first');
+  assert.equal(failed(paused).text, 'Paused');
 });
 
 test('explain: nothing live, or every live stream skipped for a while, and why', async () => {
