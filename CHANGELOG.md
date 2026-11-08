@@ -2,7 +2,12 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.35 (current)
+## 0.1.36 (current)
+- Leaving a stream just as it starts no longer crashes the app
+- Leaving a stream just as it starts no longer crashes the app, even when the last page arrives late
+- Lighter while hidden: Stream quality caps the light panel's player, and the chat and dashboard rest out of sight
+
+## 0.1.35
 - A channel that ends a stream and starts a new one is watched again straight away
 - Nothing left to farm: no repeated status, and Why isn't this farming? says you're all caught up
 
