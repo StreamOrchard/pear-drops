@@ -7,74 +7,25 @@ const path = require('node:path');
 const { launchApp, until: untilPlain } = require('./app');
 
 const MV = 'com.glowingpear.streammultiview';
-// TEMPORARY: a wait that fails says what the card showed and how the link stood.
+// A wait that fails says what the card showed and how the link to Stream Multiview stood.
 async function until(page, ...args) {
   try {
     return await untilPlain(page, ...args);
   } catch (err) {
-    const foot = await a.win.evaluate(() => document.querySelector('.app-foot')?.outerHTML.slice(0, 400) ?? '(no card)').catch(() => '?');
-    const link = await a.app.evaluate(() => (global.pdTraceLink ?? []).join('\n  ')).catch(() => '?');
-    err.message += `\n card: ${foot}\n link:\n  ${link}`;
+    const foot = await a.win.evaluate(() => document.querySelector('.app-foot')?.textContent.trim() ?? '(no card)').catch(() => '?');
+    const link = await a.app
+      .evaluate((_e, id) => {
+        const l = global.pdDebug.connected.link;
+        return JSON.stringify({ running: l.running, connected: l.conns.has(id), opening: l.opening.size, why: l.why.get(id) ?? null });
+      }, MV)
+      .catch(() => '?');
+    err.message += `\n  The card: ${foot}\n  The link: ${link}`;
     throw err;
   }
 }
 let a;
 test.before(async () => {
   a = await launchApp({ size: { width: 1480, height: 940 } });
-  // TEMPORARY: traces the <webview>s' navigations, to find the loadURL that crashes on Linux.
-  if (process.env.PD_TRACE_LOADS) {
-    await a.app.evaluate(({ app, webContents }) => {
-      const say = (wc, what) => process.stderr.write(`[trace ${Date.now() % 100000}] #${wc.id} ${wc.getType()} ${what}\n`);
-      const hook = (wc) => {
-        if (wc.getType() !== 'webview') return;
-        say(wc, 'created');
-        wc.on('did-start-navigation', (d) => d.isMainFrame && say(wc, `start ${d.url.slice(0, 60)} same=${d.isSameDocument}`));
-        wc.on('did-finish-load', () => say(wc, 'finish'));
-        wc.on('did-navigate', (_e, url) => say(wc, `navigated ${url.slice(0, 50)}`));
-        wc.on('did-stop-loading', () => say(wc, 'stopped loading'));
-        wc.on('did-fail-load', (_e, code, desc) => say(wc, `fail ${code} ${desc}`));
-        wc.on('render-process-gone', (_e, d) => say(wc, `gone ${d.reason}`));
-        wc.on('destroyed', () => process.stderr.write(`[trace] #${wc.id} destroyed\n`));
-      };
-      webContents.getAllWebContents().forEach(hook);
-      app.on('web-contents-created', (_e, wc) => setImmediate(() => !wc.isDestroyed() && hook(wc)));
-      const proto = Object.getPrototypeOf(webContents.getAllWebContents()[0]);
-      const load = proto.loadURL;
-      proto.loadURL = function (url, ...rest) {
-        if (this.getType() === 'webview') {
-          const frame = this.mainFrame;
-          say(this, `loadURL ${String(url).slice(0, 60)} | at ${this.getURL().slice(0, 40)} loading=${this.isLoading()} crashed=${this.isCrashed()} frame=${frame ? frame.url.slice(0, 30) || '(blank)' : 'none'} detached=${frame?.detached}`);
-        }
-        return load.call(this, url, ...rest);
-      };
-    });
-  }
-  // TEMPORARY: both sides' Grapevine logs, for the pairing flake on Linux.
-  if (process.env.PD_TRACE_LINK) {
-    await a.app.evaluate(() => {
-      const t0 = Date.now();
-      const lines = (global.pdTraceLink = []);
-      const add = (who, text) => {
-        lines.push(`${String(Date.now() - t0).padStart(6)} ${who} ${text}`);
-        if (lines.length > 120) lines.shift();
-      };
-      const pd = global.pdDebug.connected.link;
-      pd.on('log', (level, text) => add('pd', `${level}: ${text}`));
-      pd.on('change', () => add('pd', `change: conns=[${[...pd.conns.keys()]}] opening=${pd.opening.size} why=${JSON.stringify([...pd.why])}`));
-      const make = global.pdDemo.multiview;
-      global.pdDemo.multiview = async (o) => {
-        add('test', `multiview(${JSON.stringify(o ?? {})})`);
-        const r = await make(o);
-        const peer = global.pdDemo.multiviewPeer;
-        if (peer && !peer.traced) {
-          peer.traced = true;
-          peer.link.on('log', (level, text) => add('mv', `${level}: ${text}`));
-          peer.link.on('change', () => add('mv', `change: conns=[${[...peer.link.conns.keys()]}] opening=${peer.link.opening.size}`));
-        }
-        return r;
-      };
-    });
-  }
   await a.farming();
 });
 test.after(async () => {

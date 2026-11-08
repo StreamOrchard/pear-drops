@@ -56,7 +56,7 @@ async function launchApp({ signedIn = true, seed = true, eventSeconds = 120, hid
   for (const stream of [proc.stdout, proc.stderr]) {
     stream?.on('data', (chunk) => {
       tail.push(...String(chunk).split('\n').filter((line) => line.trim() && !/dbus/.test(line)));
-      tail.splice(0, Math.max(0, tail.length - 80));
+      tail.splice(0, Math.max(0, tail.length - 40));
     });
   }
   proc.on('exit', (code, signal) => {
