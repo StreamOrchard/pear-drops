@@ -95,14 +95,48 @@ const CHAT_CSS = `
 `;
 const ZOOM = { page: 0.8, player: 1, chat: 0.9 };
 
+// The longest a load waits for the page's navigation before it goes ahead anyway.
+const NAV_WAIT_MS = 5000;
+const navs = new WeakMap(); // a page's contents -> { busy, next, timer, done }
+
 /**
- * Loads url in a stream's page, stopping a load still under way first. Chromium crashes (on
- * Linux at least) setting up a navigation while one to another site is still starting, as when a
- * stream starts and is left straight away.
+ * Loads url in a stream's page. While the page is still on its way to another (not shown yet,
+ * nor failed), the newest url waits for it: Chromium crashes (on Linux at least) setting up a
+ * navigation then, as when a stream starts and is left straight away.
  */
 function navigate(wc, url) {
-  if (wc.isLoading()) wc.stop();
+  const nav = navs.get(wc) ?? trackNavigation(wc);
+  if (nav.busy) {
+    nav.next = url;
+    return;
+  }
+  nav.start();
   wc.loadURL(url).catch(() => {});
+}
+
+/** Follows whether a page's main frame is on its way somewhere; a load asked for meanwhile runs once it's there. */
+function trackNavigation(wc) {
+  const nav = { busy: false, next: null, timer: null };
+  nav.start = () => {
+    nav.busy = true;
+    clearTimeout(nav.timer);
+    nav.timer = setTimeout(nav.done, NAV_WAIT_MS);
+  };
+  nav.done = () => {
+    if (!nav.busy) return;
+    nav.busy = false;
+    clearTimeout(nav.timer);
+    const next = nav.next;
+    nav.next = null;
+    if (next !== null && !wc.isDestroyed()) navigate(wc, next);
+  };
+  wc.on('did-start-navigation', (d) => d?.isMainFrame && !d.isSameDocument && nav.start());
+  wc.on('did-navigate', nav.done);
+  wc.on('did-fail-load', (_e, _code, _desc, _url, isMainFrame) => isMainFrame && nav.done());
+  wc.on('did-stop-loading', nav.done);
+  wc.once('destroyed', () => clearTimeout(nav.timer));
+  navs.set(wc, nav);
+  return nav;
 }
 
 /**
