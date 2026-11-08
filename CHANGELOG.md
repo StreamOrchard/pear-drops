@@ -2,7 +2,11 @@
 
 Versions follow `major.minor.patch`. Each release's notes are written when it's published.
 
-## 0.1.34 (current)
+## 0.1.35 (current)
+- A channel that ends a stream and starts a new one is watched again straight away
+- Nothing left to farm: no repeated status, and Why isn't this farming? says you're all caught up
+
+## 0.1.34
 - Connected apps no longer leave a folder behind in /tmp each time Pear Drops stops (Grapevine 0.11.2)
 - Event crates: the last day says it's the last one, and an ended event's crate goes away
 
