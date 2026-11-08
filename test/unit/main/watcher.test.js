@@ -168,6 +168,42 @@ test('a <webview> handed over is taken only if it’s the main window’s own, o
   assert.equal(w.view, null, 'closed with the page');
 });
 
+test('a stream left while it’s still on its way waits for it: the newest load runs once it shows, fails or stops, or after 5 s', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { w, host, all } = setupWatcher();
+  w.ensureViews();
+  const player = fakeContents(5, { host });
+  const chat = fakeContents(6, { host });
+  for (const c of [player, chat]) all.set(c.id, c);
+  w.attach('player', 1, 5);
+  w.attach('chat', 1, 6);
+  w.watch('arcadia');
+  w.stop();
+  w.watch('nightowl');
+  assert.deepEqual(player.loaded, ['https://player.kick.com/arcadia?autoplay=true&muted=false'], 'waiting for arcadia');
+  player.emit('did-navigate', {}, 'https://player.kick.com/arcadia?autoplay=true&muted=false');
+  assert.deepEqual(player.loaded.at(-1), 'https://player.kick.com/nightowl?autoplay=true&muted=false', 'the newest only: the blank page is skipped');
+  assert.equal(player.loaded.length, 2);
+  w.stop();
+  player.emit('did-fail-load', {}, -3, '', '', true);
+  assert.equal(player.loaded.at(-1), 'about:blank', 'after a failed load');
+  // The chat: done with arcadia, then the blank page (the newest), then nothing waits. Its
+  // frames, and a page only rewriting its address, aren't on their way anywhere.
+  chat.emit('did-stop-loading');
+  assert.deepEqual(chat.loaded, ['https://kick.com/popout/arcadia/chat', 'about:blank']);
+  chat.emit('did-navigate', {}, 'about:blank');
+  chat.emit('did-start-navigation', { isMainFrame: false, isSameDocument: false });
+  chat.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true });
+  w.watch('pixelpear');
+  assert.equal(chat.loaded.at(-1), 'https://kick.com/popout/pixelpear/chat', 'nothing on its way: loads at once');
+  chat.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false });
+  w.stop();
+  assert.equal(chat.loaded.at(-1), 'https://kick.com/popout/pixelpear/chat');
+  t.mock.timers.tick(5000);
+  assert.equal(chat.loaded.at(-1), 'about:blank', 'never got there: goes ahead after 5 s');
+  chat.emit('destroyed');
+});
+
 test('the player’s reports count only from its own page: the chat’s only for Kick’s realtime events', () => {
   const { w, host, all, ipc } = setupWatcher();
   w.ensureViews();

@@ -95,6 +95,50 @@ const CHAT_CSS = `
 `;
 const ZOOM = { page: 0.8, player: 1, chat: 0.9 };
 
+// The longest a load waits for the page's navigation before it goes ahead anyway.
+const NAV_WAIT_MS = 5000;
+const navs = new WeakMap(); // a page's contents -> { busy, next, timer, done }
+
+/**
+ * Loads url in a stream's page. While the page is still on its way to another (not shown yet,
+ * nor failed), the newest url waits for it: Chromium crashes (on Linux at least) setting up a
+ * navigation then, as when a stream starts and is left straight away.
+ */
+function navigate(wc, url) {
+  const nav = navs.get(wc) ?? trackNavigation(wc);
+  if (nav.busy) {
+    nav.next = url;
+    return;
+  }
+  nav.start();
+  wc.loadURL(url).catch(() => {});
+}
+
+/** Follows whether a page's main frame is on its way somewhere; a load asked for meanwhile runs once it's there. */
+function trackNavigation(wc) {
+  const nav = { busy: false, next: null, timer: null };
+  nav.start = () => {
+    nav.busy = true;
+    clearTimeout(nav.timer);
+    nav.timer = setTimeout(nav.done, NAV_WAIT_MS);
+  };
+  nav.done = () => {
+    if (!nav.busy) return;
+    nav.busy = false;
+    clearTimeout(nav.timer);
+    const next = nav.next;
+    nav.next = null;
+    if (next !== null && !wc.isDestroyed()) navigate(wc, next);
+  };
+  wc.on('did-start-navigation', (d) => d?.isMainFrame && !d.isSameDocument && nav.start());
+  wc.on('did-navigate', nav.done);
+  wc.on('did-fail-load', (_e, _code, _desc, _url, isMainFrame) => isMainFrame && nav.done());
+  wc.on('did-stop-loading', nav.done);
+  wc.once('destroyed', () => clearTimeout(nav.timer));
+  navs.set(wc, nav);
+  return nav;
+}
+
 /**
  * Hosts the stream (and chat) docked inside the main window. Kick's own player code sends the
  * watch-time events; this class only loads the pages, keeps their audio muted at the window level
@@ -401,13 +445,13 @@ class Watcher extends EventEmitter {
   load(role) {
     if (!this.slug) return;
     if (role === 'chat') {
-      if (this.chatView && !this.chatView.webContents.isDestroyed() && this.showChat) this.chatView.webContents.loadURL(URLS.chat(this.slug)).catch(() => {});
+      if (this.chatView && !this.chatView.webContents.isDestroyed() && this.showChat) navigate(this.chatView.webContents, URLS.chat(this.slug));
       return;
     }
     // Not attached yet (the page is making it): attach() loads it.
     if (!this.view || this.view.webContents.isDestroyed()) return;
     const url = this.mode === 'full' ? URLS.page(this.slug) : URLS.player(this.slug);
-    this.view.webContents.loadURL(url).catch(() => {});
+    navigate(this.view.webContents, url);
   }
 
   watch(slug) {
@@ -415,7 +459,7 @@ class Watcher extends EventEmitter {
     this.reset(slug);
     this.load('player');
     if (this.showChat) this.load('chat');
-    else if (this.chatView && !this.chatView.webContents.isDestroyed()) this.chatView.webContents.loadURL('about:blank').catch(() => {});
+    else if (this.chatView && !this.chatView.webContents.isDestroyed()) navigate(this.chatView.webContents, 'about:blank');
     this.applyBounds();
     this.emit('status', this.status);
   }
@@ -436,7 +480,7 @@ class Watcher extends EventEmitter {
   stop() {
     this.reset(null);
     for (const v of [this.view, this.chatView]) {
-      if (v && !v.webContents.isDestroyed()) v.webContents.loadURL('about:blank').catch(() => {});
+      if (v && !v.webContents.isDestroyed()) navigate(v.webContents, 'about:blank');
     }
     this.emit('status', this.status);
   }
