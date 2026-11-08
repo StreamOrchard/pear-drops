@@ -169,6 +169,7 @@ class Watcher extends EventEmitter {
     this.getSettings = getSettings;
     this.silent = silent;
     this.sound = false; // the stream's sound on (the button by the stream): off at every launch
+    this.hidden = false; // the main window is hidden or minimized: the chat isn't loaded meanwhile
     this.contents = contents;
     this.view = null; // the player (light) or the whole channel page (full): { webContents }
     this.chatView = null; // the popout chat (light mode only)
@@ -198,6 +199,28 @@ class Watcher extends EventEmitter {
 
   get showChat() {
     return this.mode === 'light' && this.getSettings().showChat !== false;
+  }
+
+  /** The chat is loaded only while it can be seen: Kick credits watch time from the player alone. */
+  get chatLoaded() {
+    return this.showChat && !this.hidden;
+  }
+
+  /**
+   * The main window was hidden or minimized (true), or shown again. The chat is left (blank) while
+   * nobody can see it, and loads again when the window comes back. Kick's realtime events, which
+   * the chat hears, only make the app check sooner: its own checks still follow the stream.
+   */
+  setHidden(hidden) {
+    if (this.hidden === !!hidden) return;
+    this.hidden = !!hidden;
+    if (!this.slug || !this.showChat) return;
+    if (this.hidden) this.blankChat();
+    else this.load('chat');
+  }
+
+  blankChat() {
+    if (this.chatView && !this.chatView.webContents.isDestroyed()) navigate(this.chatView.webContents, 'about:blank');
   }
 
   reset(slug) {
@@ -279,7 +302,7 @@ class Watcher extends EventEmitter {
     });
     if (this.slug) {
       if (role === 'player') this.load('player');
-      else if (this.showChat) this.load('chat');
+      else if (this.chatLoaded) this.load('chat');
     }
     return true;
   }
@@ -451,7 +474,7 @@ class Watcher extends EventEmitter {
   load(role) {
     if (!this.slug) return;
     if (role === 'chat') {
-      if (this.chatView && !this.chatView.webContents.isDestroyed() && this.showChat) navigate(this.chatView.webContents, URLS.chat(this.slug));
+      if (this.chatView && !this.chatView.webContents.isDestroyed() && this.chatLoaded) navigate(this.chatView.webContents, URLS.chat(this.slug));
       return;
     }
     // Not attached yet (the page is making it): attach() loads it.
@@ -464,8 +487,8 @@ class Watcher extends EventEmitter {
     this.ensureViews();
     this.reset(slug);
     this.load('player');
-    if (this.showChat) this.load('chat');
-    else if (this.chatView && !this.chatView.webContents.isDestroyed()) navigate(this.chatView.webContents, 'about:blank');
+    if (this.chatLoaded) this.load('chat');
+    else this.blankChat();
     this.applyBounds();
     this.emit('status', this.status);
   }

@@ -4,7 +4,7 @@
 // anything to Kick itself.
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
-function pageHook() {
+function pageHook(quality) {
   if (window.__pdHooked) return;
   window.__pdHooked = true;
   const post = (msg) => window.postMessage({ __pd: true, ...msg }, location.origin);
@@ -44,18 +44,49 @@ function pageHook() {
     } catch {}
     return send.call(this, data);
   };
+  // Kick's embed player caps itself at 720p whatever the Stream quality setting says. Cap its IVS
+  // player at the setting instead, through the React ref Kick keeps it in (found from the video).
+  // Kick sets its own cap again when the player reloads, so this looks again every few seconds.
+  if (quality && location.hostname === 'player.kick.com') {
+    const ivsPlayer = () => {
+      const video = document.querySelector('video');
+      const key = video && Object.keys(video).find((k) => k.startsWith('__reactFiber$'));
+      for (let fiber = key ? video[key] : null; fiber; fiber = fiber.return) {
+        for (let hook = fiber.memoizedState; hook && typeof hook === 'object' && 'memoizedState' in hook; hook = hook.next) {
+          const player = hook.memoizedState?.current;
+          if (typeof player?.setAutoMaxQuality === 'function' && typeof player.getQualities === 'function') return player;
+        }
+      }
+      return null;
+    };
+    const capped = new WeakSet();
+    setInterval(() => {
+      try {
+        const player = ivsPlayer();
+        const all = player?.getQualities() ?? [];
+        if (!all.length) return;
+        // The best quality at or under the setting, or the lowest there is.
+        const cap = all.filter((q) => q.height <= quality).sort((a, b) => b.height - a.height)[0] ?? [...all].sort((a, b) => a.height - b.height)[0];
+        if (capped.has(player) && !(player.getQuality()?.height > cap.height)) return;
+        player.setAutoMaxQuality(cap);
+        capped.add(player);
+      } catch {}
+    }, 3000);
+  }
 }
 
-// The full channel page reads its starting quality from session storage: set it
-// before Kick's code runs (drops credit the same at any quality).
+// The Stream quality setting (drops credit the same at any quality). The full channel page reads
+// its starting quality from session storage: set it before Kick's code runs. The embed player is
+// capped by the page hook.
+let quality = null;
 try {
-  const quality = ipcRenderer.sendSync('watch:quality');
+  quality = ipcRenderer.sendSync('watch:quality');
   if (quality && location.hostname === 'kick.com') sessionStorage.setItem('stream_quality', String(quality));
 } catch {}
 
-const hookSource = `(${pageHook.toString()})()`;
+const hookSource = `(${pageHook.toString()})(${JSON.stringify(quality)})`;
 if (contextBridge.executeInMainWorld) {
-  contextBridge.executeInMainWorld({ func: pageHook });
+  contextBridge.executeInMainWorld({ func: pageHook, args: [quality] });
 } else {
   webFrame.executeJavaScript(hookSource);
 }

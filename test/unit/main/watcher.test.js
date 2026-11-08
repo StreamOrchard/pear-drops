@@ -170,6 +170,54 @@ test('a <webview> handed over is taken only if it’s the main window’s own, o
   assert.equal(w.view, null, 'closed with the page');
 });
 
+test('out of sight, the chat is left and the player plays on; the chat loads again as the window comes back', () => {
+  const { w, host, all } = setupWatcher();
+  w.ensureViews();
+  const player = fakeContents(5, { host });
+  const chat = fakeContents(6, { host });
+  for (const c of [player, chat]) all.set(c.id, c);
+  w.attach('player', 1, 5);
+  w.attach('chat', 1, 6);
+  w.watch('arcadia');
+  const done = (wc) => wc.emit('did-stop-loading');
+  [player, chat].forEach(done);
+  const CHAT = 'https://kick.com/popout/arcadia/chat';
+  assert.equal(chat.loaded.at(-1), CHAT);
+  const playerLoads = player.loaded.length;
+  w.setHidden(true);
+  assert.equal(chat.loaded.at(-1), 'about:blank');
+  w.setHidden(true);
+  done(chat);
+  assert.equal(chat.loaded.filter((u) => u === 'about:blank').length, 1, 'once');
+  // A stream started meanwhile, or the chat crashing, doesn't load the chat while hidden.
+  w.watch('pixelpete');
+  done(chat);
+  assert.equal(chat.loaded.at(-1), 'about:blank');
+  chat.emit('render-process-gone');
+  w.load('chat');
+  assert.equal(chat.loaded.at(-1), 'about:blank');
+  assert.ok(player.loaded.length > playerLoads, 'the player still follows the stream');
+  w.setHidden(false);
+  assert.equal(chat.loaded.at(-1), 'https://kick.com/popout/pixelpete/chat');
+  // The chat switched off: nothing to leave or load again.
+  const off = setupWatcher({ showChat: false });
+  off.w.ensureViews();
+  const offChat = fakeContents(6, { host: off.host });
+  off.all.set(6, offChat);
+  off.w.attach('chat', 1, 6);
+  off.w.watch('arcadia');
+  done(offChat);
+  const n = offChat.loaded.length;
+  off.w.setHidden(true);
+  off.w.setHidden(false);
+  assert.equal(offChat.loaded.length, n);
+  // Nothing watched: nothing loads.
+  const idle = setupWatcher();
+  idle.w.setHidden(true);
+  idle.w.setHidden(false);
+  assert.equal(idle.w.hidden, false);
+});
+
 test('a stream left while it’s still on its way waits for it: the newest load runs once that page shows, fails or stops, or after 5 s', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const { w, host, all } = setupWatcher();

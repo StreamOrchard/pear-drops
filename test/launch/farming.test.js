@@ -803,3 +803,71 @@ test('in the tray, a drop with many rewards folds them into four tiles: the clai
   await a.demo((d) => d.relistDrop('c-neon'));
   await a.app.evaluate(() => global.pdDebug.store.set({ includeGameDrops: false }));
 });
+
+/** Waits for fn, run in the main process, to return something true. */
+async function untilMain(fn, what, arg, timeout = 15000) {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const v = await a.app.evaluate(fn, arg).catch(() => null);
+    if (v) return v;
+    if (Date.now() > end) throw new Error(`Timed out waiting for ${what}`);
+    await a.win.waitForTimeout(150);
+  }
+}
+
+test('the light panel’s embed player is capped at the Stream quality setting, again after Kick resets it', async () => {
+  const cap = () => a.app.evaluate(() => global.pdDebug.watcher.view.webContents.executeJavaScript('window.__demoQualityCap?.() ?? null').catch(() => null));
+  const capIs = (name) => untilMain((_e, n) => global.pdDebug.watcher.view.webContents.executeJavaScript('window.__demoQualityCap?.()').then((c) => c === n).catch(() => false), `the cap at ${name}`, name);
+  assert.equal(await a.app.evaluate(() => global.pdDebug.store.get().playerMode ?? 'light'), 'light');
+  await a.win.evaluate(() => window.pd.setSettings({ playerQuality: '360' }));
+  await capIs('360p');
+  // Kick puts its own 720p cap back (the player reloaded): the app caps it again.
+  await a.app.evaluate(() => global.pdDebug.watcher.view.webContents.executeJavaScript('window.__demoKickCap()'));
+  await capIs('360p');
+  // Under the lowest there is: the lowest. Auto: Kick's own cap stays.
+  await a.win.evaluate(() => window.pd.setSettings({ playerQuality: '160' }));
+  await capIs('160p');
+  await a.win.evaluate(() => window.pd.setSettings({ playerQuality: 'auto' }));
+  await capIs('720p60');
+  await a.win.waitForTimeout(3500);
+  assert.equal(await cap(), '720p60', 'left at Kick’s cap');
+  await a.win.evaluate(() => window.pd.setSettings({ playerQuality: '360' }));
+  await capIs('360p');
+});
+
+test('out of sight, the dashboard stops drawing and the chat is left; the player plays on, and both come back with the window', async () => {
+  const views = () => a.app.evaluate(() => ({ player: global.pdDebug.watcher.view?.webContents.getURL(), chat: global.pdDebug.watcher.chatView?.webContents.getURL() }));
+  const changes = (ms) =>
+    a.win.evaluate((wait) => new Promise((done) => {
+      let n = 0;
+      const seen = new MutationObserver((list) => (n += list.length));
+      seen.observe(document.querySelector('#app'), { subtree: true, childList: true, characterData: true, attributes: true });
+      setTimeout(() => (seen.disconnect(), done(n)), wait);
+    }), ms);
+  await untilMain(() => /\/popout\/.+\/chat/.test(global.pdDebug.watcher.chatView?.webContents.getURL() ?? ''), 'the chat');
+  assert.ok((await changes(2500)) > 0, 'the dashboard ticks while it’s shown');
+
+  await a.app.evaluate(() => global.pdDebug.watcher.getWindow().hide());
+  await untilMain(() => global.pdDebug.watcher.chatView?.webContents.getURL() === 'about:blank', 'the chat to be left');
+  assert.match((await views()).player, /player\.kick\.com/, 'the player stays');
+  await a.win.waitForTimeout(300);
+  assert.equal(await changes(2500), 0, 'nothing drawn while hidden');
+  // Farming goes on: a credit and a conflict while hidden. The alarm still starts, and stops once
+  // credit is back, though nothing is drawn.
+  const before = await heroUnits();
+  await a.demo((d) => d.credit());
+  await a.win.evaluate(() => window.pd.setSettings({ repeatAlert: true }));
+  await a.demo((d) => d.conflict(true));
+  for (let i = 0; i < 3; i++) await a.demo((d) => d.credit());
+  await until(a.win, () => alarm.timer && farm()?.conflict, 'the alarm while hidden', 15000);
+  await a.demo((d) => d.conflict(false));
+  await a.demo((d) => d.credit());
+  await until(a.win, () => !alarm.timer, 'the alarm to stop once credit is back', 10000);
+  await a.win.evaluate(() => window.pd.setSettings({ repeatAlert: false }));
+  assert.equal(await heroUnits(), before, 'not drawn yet');
+
+  await a.app.evaluate(() => global.pdDebug.watcher.getWindow().showInactive());
+  await until(a.win, (b) => document.querySelector('.ring-sub')?.textContent !== b, 'the credit drawn as it comes back', 5000, before);
+  await untilMain(() => /\/popout\/.+\/chat/.test(global.pdDebug.watcher.chatView?.webContents.getURL() ?? ''), 'the chat back');
+  assert.ok((await changes(2500)) > 0, 'ticking again');
+});

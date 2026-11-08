@@ -768,6 +768,12 @@ function streamPage(slug, eventSeconds, mode = 'page') {
   window.__demoFreeze=(on)=>{frozen=on;if(on){const at=v.currentTime;Object.defineProperty(v,'currentTime',{configurable:true,get:()=>at})}else delete v.currentTime};
   window.__demoEnd=()=>{ended=true;v.dispatchEvent(new Event('ended'))};
   window.__demoRealtime=(event,target)=>window.postMessage({__pd:true,kind:'realtime',event,target},location.origin);
+  // Kick's embed player: an IVS player in a React ref, capped at 720p as Kick caps it. Tests read
+  // (and reset, as a reload does) the cap the app puts on it.
+  if(${JSON.stringify(mode)}==='player'){const qs=[[1080,'1080p60'],[720,'720p60'],[480,'480p'],[360,'360p'],[160,'160p']].map(([height,n])=>({name:n,height,width:Math.round(height*16/9)}));let cap=qs[1];
+  const ivs={getQualities:()=>qs,getQuality:()=>cap,setAutoMaxQuality:(q)=>{cap=q}};
+  v.__reactFiber$demo={memoizedState:{memoizedState:{current:ivs},next:null},return:null};
+  window.__demoQualityCap=()=>cap.name;window.__demoKickCap=()=>{cap=qs[1]};}
   </script></body></html>`;
 }
 

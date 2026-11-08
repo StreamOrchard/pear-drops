@@ -165,7 +165,10 @@ test('Copy player state: what the stream is doing, line by line', () => {
   assert.match(text, /^address +https:\/\/player\.kick\.com\/arcadia \(light\)$/m);
   assert.match(text, /^video +playing · ready state 4 · at 60 s · moved .* \(1 s ago\)$/m);
   assert.match(text, /^sound +window muted · player unmuted$/m);
-  assert.match(text, /^quality +Kick’s embed player$/m);
+  assert.match(text, /^quality +auto \(Kick’s embed: up to 720p\)$/m);
+  // The light panel's embed player follows the Stream quality setting too, and says what it plays.
+  const capped = playerState({ farm: { ...farm, player: { ...farm.player, video: { ...farm.player.video, height: 160 } } }, settings: { playerQuality: 360 }, now: T });
+  assert.match(capped, /^quality +up to 360p · playing 160p$/m);
   assert.match(text, /^chat +hidden$/m);
   assert.match(text, /^watch events +3 on this stream · last .* \(10 s ago\)$/m);
   assert.match(text, /^credit +last .* \(90 s ago\) · 1 event since · another session is taking it$/m);
@@ -178,7 +181,7 @@ test('Copy player state: what the stream is doing, line by line', () => {
   assert.match(full, /^loaded +not yet$/m);
   assert.match(full, /^playing +paused$/m);
   assert.match(full, /^video +no report from the page yet$/m);
-  assert.match(full, /^quality +360p$/m);
+  assert.match(full, /^quality +up to 360p$/m);
   assert.match(full, /^chat +on the page$/m);
   assert.match(full, /^watch events +0 on this stream · last never$/m);
   assert.match(playerState({ farm: { ...farm, current: { ...farm.current }, player: { mode: 'full' }, health: null }, settings: {}, now: T }), /^quality +auto$/m);

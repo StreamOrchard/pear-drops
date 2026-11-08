@@ -15,7 +15,7 @@ const DEFAULTS = {
   unmutePlayer: true,
   playerMode: 'light', // 'light': embed player + popout chat · 'full': the whole channel page
   showChat: true,
-  playerQuality: 360, // full page only; null = Kick's automatic choice
+  playerQuality: 360, // the highest the stream plays at; null = Kick's automatic choice
   playerOpen: true,
   forgetOnQuit: false,
   backupEvery: 'day', // Settings › Privacy: how often the data is backed up (backups.js): 'day' | 'week' | 'off'

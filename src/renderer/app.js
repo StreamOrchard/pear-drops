@@ -2,6 +2,7 @@
 
 let state = null;
 const ui = {
+  hidden: false, // the window is hidden or minimized: nothing is drawn meanwhile
   rewardStreams: null, // Change stream (watching for the daily reward): { list, error, picking }, while its dialog is open
   selectedCategory: null,
   chartCampaign: null,
@@ -188,14 +189,7 @@ function searchButton() {
 
 function renderBanner() {
   const f = farm();
-  if (!f?.conflict) {
-    // Credit is back: the alarm stops by itself. (The alert can arrive just before
-    // the state that shows the conflict, so only a conflict seen here can clear it.)
-    if (alarm.sawConflict) stopAlarm();
-    alarm.sawConflict = false;
-    return setHTML($('#banner'), '');
-  }
-  alarm.sawConflict = true;
+  if (!f?.conflict) return setHTML($('#banner'), '');
   // A linked Stream Multiview whose Kick players are signed in is the likely culprit: say so.
   const linked = signedInPlayers(state.connected);
   setHTML(
@@ -1314,8 +1308,6 @@ const SETTINGS_ROWS = [
       ['auto', 'Auto'],
     ],
     value: (s) => String(s.playerQuality ?? 'auto'),
-    when: (s) => s.playerMode === 'full',
-    why: 'Only with the Full page stream panel',
     words: ['resolution'],
   },
   {
@@ -1835,6 +1827,19 @@ function startAlarm() {
   render();
 }
 
+/**
+ * Credit is back: the alarm stops by itself. (The alert can arrive just before the state that
+ * shows the conflict, so only a conflict seen here can clear it.) Runs while the window is hidden too.
+ */
+function followAlarm() {
+  if (farm()?.conflict) {
+    alarm.sawConflict = true;
+    return;
+  }
+  if (alarm.sawConflict) stopAlarm();
+  alarm.sawConflict = false;
+}
+
 function stopAlarm() {
   if (!alarm.timer) return;
   clearInterval(alarm.timer);
@@ -1888,6 +1893,9 @@ function checkToasts() {
 
 function render({ tick = false } = {}) {
   if (!state) return;
+  followAlarm();
+  // Nothing to draw while the window is hidden or minimized: it draws again as it comes back.
+  if (ui.hidden) return;
   applyFont(state.settings?.font);
   commands.remembering(state.settings?.searchRecent !== false);
   if (state.settings?.searchBox === false) palette.close(false);
@@ -2349,6 +2357,10 @@ window.pd.onShowView((view) => {
   ui.view = view;
   if (view === 'history') loadHistory();
   render();
+});
+window.pd.onHidden((hidden) => {
+  ui.hidden = hidden;
+  if (!hidden) render();
 });
 window.pd.onAlert((alert) => {
   if (alert.kind !== 'stall') return;
