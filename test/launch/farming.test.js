@@ -803,3 +803,34 @@ test('in the tray, a drop with many rewards folds them into four tiles: the clai
   await a.demo((d) => d.relistDrop('c-neon'));
   await a.app.evaluate(() => global.pdDebug.store.set({ includeGameDrops: false }));
 });
+
+/** Waits for fn, run in the main process, to return something true. */
+async function untilMain(fn, what, arg, timeout = 15000) {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const v = await a.app.evaluate(fn, arg).catch(() => null);
+    if (v) return v;
+    if (Date.now() > end) throw new Error(`Timed out waiting for ${what}`);
+    await a.win.waitForTimeout(150);
+  }
+}
+
+test('the light panel’s embed player is capped at the Stream quality setting, again after Kick resets it', async () => {
+  const cap = () => a.app.evaluate(() => global.pdDebug.watcher.view.webContents.executeJavaScript('window.__demoQualityCap?.() ?? null').catch(() => null));
+  const capIs = (name) => untilMain((_e, n) => global.pdDebug.watcher.view.webContents.executeJavaScript('window.__demoQualityCap?.()').then((c) => c === n).catch(() => false), `the cap at ${name}`, name);
+  assert.equal(await a.app.evaluate(() => global.pdDebug.store.get().playerMode ?? 'light'), 'light');
+  await a.win.evaluate(() => window.pd.setSettings({ playerQuality: '360' }));
+  await capIs('360p');
+  // Kick puts its own 720p cap back (the player reloaded): the app caps it again.
+  await a.app.evaluate(() => global.pdDebug.watcher.view.webContents.executeJavaScript('window.__demoKickCap()'));
+  await capIs('360p');
+  // Under the lowest there is: the lowest. Auto: Kick's own cap stays.
+  await a.win.evaluate(() => window.pd.setSettings({ playerQuality: '160' }));
+  await capIs('160p');
+  await a.win.evaluate(() => window.pd.setSettings({ playerQuality: 'auto' }));
+  await capIs('720p60');
+  await a.win.waitForTimeout(3500);
+  assert.equal(await cap(), '720p60', 'left at Kick’s cap');
+  await a.win.evaluate(() => window.pd.setSettings({ playerQuality: '360' }));
+  await capIs('360p');
+});

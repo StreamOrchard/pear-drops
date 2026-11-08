@@ -1314,8 +1314,6 @@ const SETTINGS_ROWS = [
       ['auto', 'Auto'],
     ],
     value: (s) => String(s.playerQuality ?? 'auto'),
-    when: (s) => s.playerMode === 'full',
-    why: 'Only with the Full page stream panel',
     words: ['resolution'],
   },
   {
