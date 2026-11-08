@@ -10,32 +10,6 @@ const MV = 'com.glowingpear.streammultiview';
 let a;
 test.before(async () => {
   a = await launchApp({ size: { width: 1480, height: 940 } });
-  // TEMPORARY: traces the <webview>s' navigations, to find the loadURL that crashes on Linux.
-  if (process.env.PD_TRACE_LOADS) {
-    await a.app.evaluate(({ app, webContents }) => {
-      const say = (wc, what) => process.stderr.write(`[trace ${Date.now() % 100000}] #${wc.id} ${wc.getType()} ${what}\n`);
-      const hook = (wc) => {
-        if (wc.getType() !== 'webview') return;
-        say(wc, 'created');
-        wc.on('did-start-navigation', (d) => d.isMainFrame && say(wc, `start ${d.url.slice(0, 60)} same=${d.isSameDocument}`));
-        wc.on('did-finish-load', () => say(wc, 'finish'));
-        wc.on('did-fail-load', (_e, code, desc) => say(wc, `fail ${code} ${desc}`));
-        wc.on('render-process-gone', (_e, d) => say(wc, `gone ${d.reason}`));
-        wc.on('destroyed', () => process.stderr.write(`[trace] #${wc.id} destroyed\n`));
-      };
-      webContents.getAllWebContents().forEach(hook);
-      app.on('web-contents-created', (_e, wc) => setImmediate(() => !wc.isDestroyed() && hook(wc)));
-      const proto = Object.getPrototypeOf(webContents.getAllWebContents()[0]);
-      const load = proto.loadURL;
-      proto.loadURL = function (url, ...rest) {
-        if (this.getType() === 'webview') {
-          const frame = this.mainFrame;
-          say(this, `loadURL ${String(url).slice(0, 60)} | at ${this.getURL().slice(0, 40)} loading=${this.isLoading()} crashed=${this.isCrashed()} frame=${frame ? frame.url.slice(0, 30) || '(blank)' : 'none'} detached=${frame?.detached}`);
-        }
-        return load.call(this, url, ...rest);
-      };
-    });
-  }
   await a.farming();
 });
 test.after(async () => {
