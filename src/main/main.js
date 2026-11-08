@@ -340,6 +340,9 @@ function createMainWindow() {
     event.preventDefault();
     hideToTray();
   });
+  // Out of sight, the chat is left (watcher.setHidden).
+  const hiddenNow = () => watcher?.setHidden(!mainWindow.isVisible() || mainWindow.isMinimized());
+  ['hide', 'show', 'minimize', 'restore'].forEach((e) => mainWindow.on(e, hiddenNow));
   mainWindow.on('closed', () => {
     mainWindow = null;
     // Hidden helper windows (API page, tray popover) would otherwise keep the app alive.
