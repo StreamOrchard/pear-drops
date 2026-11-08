@@ -12,6 +12,12 @@ contextBridge.exposeInMainWorld('pd', {
     ipcRenderer.on('alert', listener);
     return () => ipcRenderer.removeListener('alert', listener);
   },
+  // The window was hidden or minimized (true), or shown again.
+  onHidden: (callback) => {
+    const listener = (_event, hidden) => callback(hidden);
+    ipcRenderer.on('window:hidden', listener);
+    return () => ipcRenderer.removeListener('window:hidden', listener);
+  },
   onPlayerFrame: (callback) => {
     const listener = (_event, role, jpeg) => callback(role, jpeg);
     ipcRenderer.on('player:frame', listener);

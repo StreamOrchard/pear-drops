@@ -340,8 +340,12 @@ function createMainWindow() {
     event.preventDefault();
     hideToTray();
   });
-  // Out of sight, the chat is left (watcher.setHidden).
-  const hiddenNow = () => watcher?.setHidden(!mainWindow.isVisible() || mainWindow.isMinimized());
+  // Out of sight, the page stops drawing and the chat is left (watcher.setHidden).
+  const hiddenNow = () => {
+    const hidden = !mainWindow.isVisible() || mainWindow.isMinimized();
+    watcher?.setHidden(hidden);
+    sendTo(mainWindow, 'window:hidden', hidden);
+  };
   ['hide', 'show', 'minimize', 'restore'].forEach((e) => mainWindow.on(e, hiddenNow));
   mainWindow.on('closed', () => {
     mainWindow = null;

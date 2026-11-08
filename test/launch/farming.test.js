@@ -834,3 +834,40 @@ test('the light panel’s embed player is capped at the Stream quality setting, 
   await a.win.evaluate(() => window.pd.setSettings({ playerQuality: '360' }));
   await capIs('360p');
 });
+
+test('out of sight, the dashboard stops drawing and the chat is left; the player plays on, and both come back with the window', async () => {
+  const views = () => a.app.evaluate(() => ({ player: global.pdDebug.watcher.view?.webContents.getURL(), chat: global.pdDebug.watcher.chatView?.webContents.getURL() }));
+  const changes = (ms) =>
+    a.win.evaluate((wait) => new Promise((done) => {
+      let n = 0;
+      const seen = new MutationObserver((list) => (n += list.length));
+      seen.observe(document.querySelector('#app'), { subtree: true, childList: true, characterData: true, attributes: true });
+      setTimeout(() => (seen.disconnect(), done(n)), wait);
+    }), ms);
+  await untilMain(() => /\/popout\/.+\/chat/.test(global.pdDebug.watcher.chatView?.webContents.getURL() ?? ''), 'the chat');
+  assert.ok((await changes(2500)) > 0, 'the dashboard ticks while it’s shown');
+
+  await a.app.evaluate(() => global.pdDebug.watcher.getWindow().hide());
+  await untilMain(() => global.pdDebug.watcher.chatView?.webContents.getURL() === 'about:blank', 'the chat to be left');
+  assert.match((await views()).player, /player\.kick\.com/, 'the player stays');
+  await a.win.waitForTimeout(300);
+  assert.equal(await changes(2500), 0, 'nothing drawn while hidden');
+  // Farming goes on: a credit and a conflict while hidden. The alarm still starts, and stops once
+  // credit is back, though nothing is drawn.
+  const before = await heroUnits();
+  await a.demo((d) => d.credit());
+  await a.win.evaluate(() => window.pd.setSettings({ repeatAlert: true }));
+  await a.demo((d) => d.conflict(true));
+  for (let i = 0; i < 3; i++) await a.demo((d) => d.credit());
+  await until(a.win, () => alarm.timer && farm()?.conflict, 'the alarm while hidden', 15000);
+  await a.demo((d) => d.conflict(false));
+  await a.demo((d) => d.credit());
+  await until(a.win, () => !alarm.timer, 'the alarm to stop once credit is back', 10000);
+  await a.win.evaluate(() => window.pd.setSettings({ repeatAlert: false }));
+  assert.equal(await heroUnits(), before, 'not drawn yet');
+
+  await a.app.evaluate(() => global.pdDebug.watcher.getWindow().showInactive());
+  await until(a.win, (b) => document.querySelector('.ring-sub')?.textContent !== b, 'the credit drawn as it comes back', 5000, before);
+  await untilMain(() => /\/popout\/.+\/chat/.test(global.pdDebug.watcher.chatView?.webContents.getURL() ?? ''), 'the chat back');
+  assert.ok((await changes(2500)) > 0, 'ticking again');
+});
