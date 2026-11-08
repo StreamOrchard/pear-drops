@@ -97,7 +97,7 @@ const ZOOM = { page: 0.8, player: 1, chat: 0.9 };
 
 // The longest a load waits for the page's navigation before it goes ahead anyway.
 const NAV_WAIT_MS = 5000;
-const navs = new WeakMap(); // a page's contents -> { busy, next, timer, done }
+const navs = new WeakMap(); // a page's contents -> { url, next, timer, start, done }
 
 /**
  * Loads url in a stream's page. While the page is still on its way to another (not shown yet,
@@ -106,34 +106,40 @@ const navs = new WeakMap(); // a page's contents -> { busy, next, timer, done }
  */
 function navigate(wc, url) {
   const nav = navs.get(wc) ?? trackNavigation(wc);
-  if (nav.busy) {
+  if (nav.url !== null) {
     nav.next = url;
     return;
   }
-  nav.start();
+  nav.start(url);
   wc.loadURL(url).catch(() => {});
 }
 
-/** Follows whether a page's main frame is on its way somewhere; a load asked for meanwhile runs once it's there. */
+/**
+ * Follows where a page's main frame is on its way to (url, or null); a load asked for meanwhile
+ * runs once it's there. Only that page's arrival or failure counts: the one before it can still
+ * report arriving after the next has started.
+ */
 function trackNavigation(wc) {
-  const nav = { busy: false, next: null, timer: null };
-  nav.start = () => {
-    nav.busy = true;
+  const nav = { url: null, next: null, timer: null };
+  nav.start = (url) => {
+    nav.url = url;
     clearTimeout(nav.timer);
     nav.timer = setTimeout(nav.done, NAV_WAIT_MS);
   };
   nav.done = () => {
-    if (!nav.busy) return;
-    nav.busy = false;
+    if (nav.url === null) return;
+    nav.url = null;
     clearTimeout(nav.timer);
     const next = nav.next;
     nav.next = null;
     if (next !== null && !wc.isDestroyed()) navigate(wc, next);
   };
-  wc.on('did-start-navigation', (d) => d?.isMainFrame && !d.isSameDocument && nav.start());
-  wc.on('did-navigate', nav.done);
-  wc.on('did-fail-load', (_e, _code, _desc, _url, isMainFrame) => isMainFrame && nav.done());
-  wc.on('did-stop-loading', nav.done);
+  const reached = (url) => url === nav.url && nav.done();
+  wc.on('did-start-navigation', (d) => d?.isMainFrame && !d.isSameDocument && nav.start(d.url));
+  wc.on('did-redirect-navigation', (d) => d?.isMainFrame && nav.url !== null && (nav.url = d.url));
+  wc.on('did-navigate', (_e, url) => reached(url));
+  wc.on('did-fail-load', (_e, _code, _desc, url, isMainFrame) => isMainFrame && reached(url));
+  wc.on('did-stop-loading', () => !wc.isLoading() && nav.done());
   wc.once('destroyed', () => clearTimeout(nav.timer));
   navs.set(wc, nav);
   return nav;
