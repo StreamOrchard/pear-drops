@@ -48,6 +48,21 @@ async function launchApp({ signedIn = true, seed = true, eventSeconds = 120, hid
   // wouldn't start there. The app's own pages keep their per-page sandbox.
   const app = await playwright()._electron.launch({ args: ['--no-sandbox', ROOT], cwd: ROOT, env });
   const errors = [];
+  // An app that ends on its own (a crash) only fails the next call with "Target page, context or
+  // browser has been closed": say how it ended, with the last lines it wrote.
+  let closing = false;
+  const tail = [];
+  const proc = app.process();
+  for (const stream of [proc.stdout, proc.stderr]) {
+    stream?.on('data', (chunk) => {
+      tail.push(...String(chunk).split('\n').filter((line) => line.trim() && !/dbus/.test(line)));
+      tail.splice(0, Math.max(0, tail.length - 40));
+    });
+  }
+  proc.on('exit', (code, signal) => {
+    if (closing) return;
+    console.error(`The app ended on its own (${signal ?? `exit code ${code}`}). Its last lines:\n  ${tail.join('\n  ') || '(none)'}`);
+  });
   // The dashboard, not just the first window: the hidden kick.com page for API calls can open first.
   let win = null;
   for (const end = Date.now() + 30000; !win; await new Promise((r) => setTimeout(r, 100))) {
@@ -109,6 +124,7 @@ async function launchApp({ signedIn = true, seed = true, eventSeconds = 120, hid
       }
     },
     async close() {
+      closing = true;
       await app.close().catch(() => {});
       fs.rmSync(data, { recursive: true, force: true });
     },
