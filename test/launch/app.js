@@ -60,7 +60,8 @@ async function launchApp({ signedIn = true, seed = true, eventSeconds = 120, hid
     });
   }
   proc.on('exit', (code, signal) => {
-    if (closing) return;
+    // Exit code 0: the app quit itself, as tests that restart or quit it ask.
+    if (closing || (!signal && code === 0)) return;
     console.error(`The app ended on its own (${signal ?? `exit code ${code}`}). Its last lines:\n  ${tail.join('\n  ') || '(none)'}`);
   });
   // The dashboard, not just the first window: the hidden kick.com page for API calls can open first.

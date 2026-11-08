@@ -96,6 +96,16 @@ const CHAT_CSS = `
 const ZOOM = { page: 0.8, player: 1, chat: 0.9 };
 
 /**
+ * Loads url in a stream's page, stopping a load still under way first. Chromium crashes (on
+ * Linux at least) setting up a navigation while one to another site is still starting, as when a
+ * stream starts and is left straight away.
+ */
+function navigate(wc, url) {
+  if (wc.isLoading()) wc.stop();
+  wc.loadURL(url).catch(() => {});
+}
+
+/**
  * Hosts the stream (and chat) docked inside the main window. Kick's own player code sends the
  * watch-time events; this class only loads the pages, keeps their audio muted at the window level
  * and reports what the player is doing.
@@ -401,13 +411,13 @@ class Watcher extends EventEmitter {
   load(role) {
     if (!this.slug) return;
     if (role === 'chat') {
-      if (this.chatView && !this.chatView.webContents.isDestroyed() && this.showChat) this.chatView.webContents.loadURL(URLS.chat(this.slug)).catch(() => {});
+      if (this.chatView && !this.chatView.webContents.isDestroyed() && this.showChat) navigate(this.chatView.webContents, URLS.chat(this.slug));
       return;
     }
     // Not attached yet (the page is making it): attach() loads it.
     if (!this.view || this.view.webContents.isDestroyed()) return;
     const url = this.mode === 'full' ? URLS.page(this.slug) : URLS.player(this.slug);
-    this.view.webContents.loadURL(url).catch(() => {});
+    navigate(this.view.webContents, url);
   }
 
   watch(slug) {
@@ -415,7 +425,7 @@ class Watcher extends EventEmitter {
     this.reset(slug);
     this.load('player');
     if (this.showChat) this.load('chat');
-    else if (this.chatView && !this.chatView.webContents.isDestroyed()) this.chatView.webContents.loadURL('about:blank').catch(() => {});
+    else if (this.chatView && !this.chatView.webContents.isDestroyed()) navigate(this.chatView.webContents, 'about:blank');
     this.applyBounds();
     this.emit('status', this.status);
   }
@@ -436,7 +446,7 @@ class Watcher extends EventEmitter {
   stop() {
     this.reset(null);
     for (const v of [this.view, this.chatView]) {
-      if (v && !v.webContents.isDestroyed()) v.webContents.loadURL('about:blank').catch(() => {});
+      if (v && !v.webContents.isDestroyed()) navigate(v.webContents, 'about:blank');
     }
     this.emit('status', this.status);
   }

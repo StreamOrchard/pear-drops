@@ -92,6 +92,13 @@ function fakeContents(id, { type = 'webview', host = null } = {}) {
     isDestroyed: () => false,
     setAudioMuted: (m) => (wc.muted = m),
     setWindowOpenHandler: (fn) => (wc.openHandler = fn),
+    loading: false,
+    stopped: 0,
+    isLoading: () => wc.loading,
+    stop: () => {
+      wc.stopped += 1;
+      wc.loading = false;
+    },
     loadURL: async (url) => wc.loaded.push(url),
     send: (...a) => wc.sent.push(a),
     insertCSS: async () => {},
@@ -166,6 +173,26 @@ test('a <webview> handed over is taken only if it’s the main window’s own, o
   assert.deepEqual(chat.loaded, ['https://kick.com/popout/arcadia/chat']);
   player.emit('destroyed');
   assert.equal(w.view, null, 'closed with the page');
+});
+
+test('a stream left while it’s still starting has its load stopped before the blank page, and one loaded is left as it is', () => {
+  const { w, host, all } = setupWatcher();
+  w.ensureViews();
+  const player = fakeContents(5, { host });
+  const chat = fakeContents(6, { host });
+  for (const c of [player, chat]) all.set(c.id, c);
+  w.attach('player', 1, 5);
+  w.attach('chat', 1, 6);
+  w.watch('arcadia');
+  assert.equal(player.stopped + chat.stopped, 0, 'nothing under way: nothing stopped');
+  player.loading = chat.loading = true;
+  w.stop();
+  assert.deepEqual([player.stopped, chat.stopped], [1, 1]);
+  assert.deepEqual([player.loaded.at(-1), chat.loaded.at(-1)], ['about:blank', 'about:blank']);
+  player.loading = true;
+  w.watch('nightowl');
+  assert.equal(player.stopped, 2, 'the blank page still loading: stopped before the next stream');
+  assert.equal(player.loaded.at(-1), 'https://player.kick.com/nightowl?autoplay=true&muted=false');
 });
 
 test('the player’s reports count only from its own page: the chat’s only for Kick’s realtime events', () => {
